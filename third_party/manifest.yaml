@@ -1,0 +1,27 @@
+schema_version: 1
+project: EmbodiSteer
+status: "pinned-dependencies"
+notes:
+  - "ManiSkill is pinned to commit d9283787fcdc6416180982468e2bd173087b46dd."
+  - "Checkpoint and training-data artifacts are described separately in artifacts/manifest.yaml."
+repositories:
+  maniskill:
+    role: "simulation tasks, robots, obstacles and floating-gripper environments"
+    upstream_url: https://github.com/mani-skill/ManiSkill.git
+    fork_url: https://github.com/frankWang67/ManiSkill.git
+    base_commit: 58aa10fd940b80c24bed979202e49abffb3c1a09
+    commit: d9283787fcdc6416180982468e2bd173087b46dd
+    parent_commit: 58aa10fd940b80c24bed979202e49abffb3c1a09
+    status: pinned_release_commit
+    code_license: Apache-2.0
+    asset_license: CC-BY-NC-4.0
+    install: editable
+  curobo:
+    role: "robot descriptions, collision spheres, FK/IK and SDF queries"
+    upstream_url: https://github.com/NVlabs/curobo.git
+    fork_url: https://github.com/frankWang67/curobo.git
+    commit: dc5840e7552a8ba9fa210237b554cb6d3bbf4bf2
+    status: pinned_release_commit
+    code_license: NVIDIA-License
+    asset_license: LICENSE_ASSETS
+    install: editable

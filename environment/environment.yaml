@@ -1,0 +1,94 @@
+name: embodisteer
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10.14
+  - pip=22.1.2
+  # cuRobo build tooling needs a conservative CMake range.
+  - cmake<3.28
+  # trick to avoid cpu affinity issue described in https://github.com/pytorch/pytorch/issues/99625
+  - llvm-openmp=14
+  - exiftool=12.76
+  - pip:
+    - torch==2.7.1 --index-url https://download.pytorch.org/whl/cu128
+    - torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cu128
+    - av==10.0.0
+    - scikit-video==1.1.11
+    - lmdb==1.4.1
+    - timm==0.9.7
+    - scikit-fda==0.9.1
+    - Cython==0.29.37
+    - accelerate==0.24.1
+    - boto3==1.33.13
+    - aiohttp==3.9.5
+    - aiofiles==23.2.1
+    - gym==0.23.1
+    - click==8.3.1
+    - omegaconf==2.3.0
+    - Pillow==11.0.0
+    - filelock==3.20.3
+    - psutil==7.2.1
+    # Core runtime versions used by the public simulation and real-world paths.
+    - numpy==1.26.4
+    - scipy==1.15.3
+    - numba==0.65.0
+    - pandas==2.1.0
+    - opencv-python==4.7.0.72
+    - ipykernel==6.23
+    - matplotlib==3.7
+    - k3d==2.15
+    - pyyaml==6.0
+    - tqdm==4.65
+    - zarr==2.16
+    - numcodecs==0.11
+    - hydra-core==1.2.0
+    - wandb==0.15.8
+    - dill==0.3.7
+    - einops==0.6.1
+    - diffusers==0.18.2
+    - ray[default]==2.8.0
+    - threadpoolctl==3.2
+    - v4l2py==2.2
+    - ur-rtde==1.5.6
+    # requires apt install libspnav-dev spacenavd; systemctl start spacenavd
+    - spnav @ https://github.com/cheng-chi/spnav/archive/c1c938ebe3cc542db4685e0d13850ff1abfdb943.tar.gz
+    - atomics==1.0.2
+    - pynput==1.7.6
+    - fastcrc==0.2
+    - imagecodecs==2023.9.18
+    - robomimic==0.2.0
+    # requires mujoco py dependencies libosmesa6-dev libgl1-mesa-glx libglfw3 patchelf
+    - free-mujoco-py==2.1.6
+    - robosuite @ https://github.com/cheng-chi/robosuite/archive/3f2c3116f1c0a1916e94bfa28da4d055927d1ab3.tar.gz
+    # implicitly depend on conda package exiftool
+    - PyExifTool==0.5
+    - moviepy==1.0.3
+    - zerorpc==0.6.3
+    - huggingface_hub==0.25.2
+    - pytorch-kinematics==0.10.0
+    # Runtime dependencies declared by the pinned ManiSkill commit
+    # d9283787fcdc6416180982468e2bd173087b46dd.
+    - gymnasium==0.29.1
+    - dacite==1.9.2
+    - h5py==3.15.1
+    - GitPython==3.1.46
+    - tabulate==0.9.0
+    - transforms3d==0.4.2
+    - trimesh==4.11.1
+    - imageio==2.37.2
+    - mplib==0.1.1
+    - fast_kinematics==0.2.2
+    - IPython==8.38.0
+    - nvidia-ml-py==13.590.48
+    - tyro==1.0.5
+    - sapien==3.0.3
+    # Runtime dependencies declared by the pinned cuRobo fork.
+    - numpy-quaternion==2024.0.13
+    - yourdfpy==0.0.60
+    - warp-lang==1.12.1
+    - scikit-image==0.25.2
+    - networkx==3.4
+    - pybind11==3.0.1
+    - setuptools-scm==10.0.5
+    - importlib_resources==7.1.0

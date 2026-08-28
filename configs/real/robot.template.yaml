@@ -1,0 +1,19 @@
+robots:
+  - robot_type: ur5
+    robot_ip: YOUR_ROBOT_IP
+    robot_obs_latency: 0.0001
+    robot_action_latency: 0.1
+    tcp_offset: 0.235
+    height_threshold: -0.024
+    sphere_radius: 0.1
+    sphere_center: [0.0, -0.06, -0.185]
+grippers:
+  - gripper_ip: YOUR_GRIPPER_IP
+    gripper_port: 1000
+    gripper_obs_latency: 0.01
+    gripper_action_latency: 0.1
+tx_left_right:
+  - [1.0, 0.0, 0.0, 0.0]
+  - [0.0, 1.0, 0.0, 0.0]
+  - [0.0, 0.0, 1.0, 0.0]
+  - [0.0, 0.0, 0.0, 1.0]

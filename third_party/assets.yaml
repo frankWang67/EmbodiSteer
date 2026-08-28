@@ -1,0 +1,89 @@
+schema_version: 1
+project: EmbodiSteer
+description: >-
+  Provenance and redistribution status for assets included in this repository
+  or materialized from pinned external forks.
+
+asset_groups:
+  umi_block_pushing:
+    path: diffusion_policy/env/block_pushing/assets/
+    source_repository: https://github.com/frankWang67/universal_manipulation_interface.git
+    source_revision: c34ba9c6861fec16eb84a1cd0a40d06432aaf055
+    upstream_repository: https://github.com/google-research/ibc
+    source_path_hint: third_party/py/envs/assets/
+    license: Apache-2.0 (code-header evidence; asset-level confirmation required)
+    license_evidence:
+      - diffusion_policy/env/block_pushing/block_pushing.py
+      - diffusion_policy/env/block_pushing/block_pushing_discontinuous.py
+      - diffusion_policy/env/block_pushing/utils/xarm_sim_robot.py
+    attribution: "The Reach ML Authors; historical IBC-style asset layout"
+    redistribution_status: included
+    modifications: none
+    review_status: needs_asset_level_confirmation
+    notes: >-
+      The adjacent source files carry Apache-2.0 headers, but this is not a
+      final determination that every mesh and URDF has the same license. Check
+      the upstream asset-level terms before a public binary redistribution.
+
+  umi_kitchen_dsuite:
+    path: diffusion_policy/env/kitchen/relay_policy_learning/adept_models/
+    source_repository: https://github.com/frankWang67/universal_manipulation_interface.git
+    source_revision: c34ba9c6861fec16eb84a1cd0a40d06432aaf055
+    upstream_repository: https://github.com/google-research/robel
+    source_path_hint: D'Suite scenes and common assets
+    license: Apache-2.0
+    license_evidence:
+      - diffusion_policy/env/kitchen/relay_policy_learning/adept_models/LICENSE
+      - diffusion_policy/env/kitchen/relay_policy_learning/adept_models/README.public.md
+    attribution: "The D'Suite Authors; based on Google's ROBEL suite"
+    redistribution_status: included
+    modifications: none
+    review_status: documented_upstream_notice
+
+  umi_franka_mujoco:
+    path: diffusion_policy/env/kitchen/relay_policy_learning/third_party/franka/
+    source_repository: https://github.com/frankWang67/universal_manipulation_interface.git
+    source_revision: c34ba9c6861fec16eb84a1cd0a40d06432aaf055
+    upstream_repositories:
+      - https://github.com/vikashplus/franka
+      - https://github.com/frankaemika/franka_ros
+      - https://github.com/StanfordASL/PandaRobot.jl
+    license: Apache-2.0
+    license_evidence:
+      - diffusion_policy/env/kitchen/relay_policy_learning/third_party/franka/LICENSE
+      - diffusion_policy/env/kitchen/relay_policy_learning/third_party/franka/franka_panda.xml
+    attribution: "Vikash Kumar and the upstream Franka/ROBOT model projects"
+    redistribution_status: included
+    modifications: documented_in_xml_headers
+    review_status: documented_upstream_notice
+    notes: >-
+      MuJoCo and upstream model notices embedded in the XML files remain part
+      of the asset attribution boundary.
+
+  maniskill_assets:
+    path: third_party/src/maniskill/
+    source_repository: https://github.com/frankWang67/ManiSkill.git
+    source_revision: d9283787fcdc6416180982468e2bd173087b46dd
+    license: CC-BY-NC-4.0 (assets; code is Apache-2.0)
+    license_evidence:
+      - third_party/manifest.yaml
+      - dependency checkout LICENSE
+      - dependency checkout LICENSE-3RD-PARTY
+    attribution: ManiSkill contributors
+    redistribution_status: external_materialization_required
+    modifications: outside_this_tree
+    review_status: pinned_dependency
+
+  curobo_assets:
+    path: third_party/src/curobo/
+    source_repository: https://github.com/frankWang67/curobo.git
+    source_revision: dc5840e7552a8ba9fa210237b554cb6d3bbf4bf2
+    license: NVIDIA-License for code; LICENSE_ASSETS for external assets
+    license_evidence:
+      - third_party/manifest.yaml
+      - dependency checkout LICENSE
+      - dependency checkout LICENSE_ASSETS
+    attribution: NVIDIA cuRobo contributors and each asset's upstream author
+    redistribution_status: external_materialization_required
+    modifications: outside_this_tree
+    review_status: pinned_dependency

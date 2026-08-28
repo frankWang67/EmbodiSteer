@@ -1,0 +1,20 @@
+frame: robot_base
+units: meters
+quaternion_order: wxyz
+obstacles:
+  - name: door_bottom
+    center: [0.520, -0.140, 0.140]
+    quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+    half_extent: [0.010, 0.200, 0.010]
+  - name: door_top
+    center: [0.520, -0.140, 0.520]
+    quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+    half_extent: [0.010, 0.200, 0.010]
+  - name: door_left
+    center: [0.520, -0.330, 0.330]
+    quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+    half_extent: [0.010, 0.010, 0.200]
+  - name: door_right
+    center: [0.520, 0.050, 0.330]
+    quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+    half_extent: [0.010, 0.010, 0.200]

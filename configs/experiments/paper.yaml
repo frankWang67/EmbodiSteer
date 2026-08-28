@@ -1,0 +1,53 @@
+schema_version: 1
+project: EmbodiSteer
+artifact_status: not_published
+policy_config: configs/policy/embodisteer.yaml
+robots:
+  - ur5_robotiq_wristcam
+  - panda_robotiq_wristcam
+  - xarm6_robotiq_wristcam
+  - xarm7_robotiq_wristcam
+  - iiwa7_robotiq_wristcam
+  - gen3_6dof_robotiq_wristcam
+  - gen3_7dof_robotiq_wristcam
+  - rizon4_robotiq_wristcam
+  - sawyer_robotiq_wristcam
+tasks:
+  place_toast:
+    paper_name: PlaceToast
+    env_id: PickPlaceToasterToCounter-v1
+    checkpoint: null
+  turn_faucet:
+    paper_name: TurnFaucet
+    env_id: TurnOnSinkFaucet-v1
+    checkpoint: null
+  make_coffee:
+    paper_name: MakeCoffee
+    env_id: MakeIcedCoffee-v1
+    checkpoint: null
+methods:
+  ee:
+    inference_space: ee
+    guidance: ""
+    control_mode: pd_ee_pose
+  embodisteer:
+    inference_space: joint
+    guidance: cbf
+    control_mode: pd_joint_pos
+guidance_defaults:
+  denoising_steps: 16
+  jacobian_damping: 0.001
+  jac_noise_alpha: 0.1
+  max_dq_per_step: 0.5
+  sdf_aggregation: topk
+  sdf_topk: 4
+  sdf_temperature: 20.0
+  cbf_lambda: 0.01
+  task_position_weight: 1.0
+  task_rotation_weight: 0.1
+  guidance_clip: 0.1
+evaluation:
+  seed: 2022
+  episodes_per_robot: 100
+  collision_occurrence_metric: Fail@All
+  collision_count_semantics: colliding simulation steps per episode

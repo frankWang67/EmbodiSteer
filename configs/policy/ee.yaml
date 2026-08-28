@@ -1,0 +1,10 @@
+schema_version: 1
+
+# Minimal Cartesian policy profile. Unspecified numeric fields use the audited
+# defaults documented in configs/policy/embodisteer.yaml.
+policy:
+  inference_space: ee
+  guidance:
+    method: ""
+  baseline:
+    method: ""

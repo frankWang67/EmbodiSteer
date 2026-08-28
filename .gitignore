@@ -1,0 +1,27 @@
+# Local data, checkpoints and experiment output
+data/
+data_local/
+outputs/
+wandb/
+scripts_maniskill/evals/
+pretrained/
+*.ckpt
+*.pth
+*.pt
+*.zarr
+*.zarr.zip
+
+# Local dependency materialization and caches
+third_party/src/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.venv/
+
+# Internal planning and audit notes are kept locally and are not release files.
+.codex/
+
+# Device/site configuration should be supplied outside the release tree
+*.local.yaml
+*.local.yml
