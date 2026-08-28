@@ -18,22 +18,27 @@ import torch
 
 from diffusion_policy.common.pytorch_util import dict_apply
 from scripts_maniskill.benchmark_jm2d_speed import configure_method, load_policy
+from embodisteer.runtime_config import load_policy_config
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--checkpoint",
-        default="scripts_maniskill/evals/PickPlaceToasterToCounter_0512/ckpt/latest.ckpt",
+        required=True,
     )
     parser.add_argument(
         "--benchmark-input",
-        default="/tmp/jm2d_benchmark_input_seed2022.pt",
+        required=True,
     )
     parser.add_argument("--output", required=True)
     parser.add_argument("--warmup", type=int, default=5)
     parser.add_argument("--trials", type=int, default=20)
-    parser.add_argument("--num-inference-steps", type=int, default=16)
+    parser.add_argument(
+        "--policy-config",
+        default=str(ROOT_DIR / "configs" / "policy" / "embodisteer.yaml"),
+        help="Canonical policy YAML supplying inference and guidance settings.",
+    )
     parser.add_argument("--cudnn-benchmark", action="store_true")
     parser.add_argument("--disable-hot-compile", action="store_true")
     parser.add_argument("--compile-unet", action="store_true")
@@ -156,6 +161,7 @@ def benchmark_callable(fn, warmup, trials, *, legacy=False):
 
 def main():
     args = parse_args()
+    policy_settings = load_policy_config(args.policy_config)
     torch.set_float32_matmul_precision(args.matmul_precision)
     torch.backends.cudnn.benchmark = bool(args.cudnn_benchmark)
     device = torch.device("cuda:0")
@@ -168,9 +174,10 @@ def main():
     fixture = torch.load(
         fixture_path.open("rb"), map_location="cpu", weights_only=False
     )
-    cfg = configure_method(payload["cfg"], "embodisteer", 16)
-    workspace, policy = load_policy(payload, cfg, device, "embodisteer")
-    policy.num_inference_steps = args.num_inference_steps
+    cfg = configure_method(payload["cfg"], "embodisteer", policy_settings)
+    workspace, policy = load_policy(
+        payload, cfg, device, "embodisteer", policy_settings
+    )
     benchmark_input = {
         "obs_dict": dict_apply(
             fixture["obs_dict_cpu"], lambda x: x.to(device)
@@ -260,7 +267,7 @@ def main():
     policy.noise_scheduler.set_timesteps(policy.num_inference_steps)
     timesteps = list(policy.noise_scheduler.timesteps)
 
-    def unet_16_call():
+    def unet_configured_steps_call():
         with torch.no_grad():
             for timestep in timesteps:
                 policy.model(
@@ -300,11 +307,11 @@ def main():
         "encoder_legacy_without_post_sync": benchmark_callable(
             encoder_call, args.warmup, args.trials, legacy=True
         ),
-        "unet_16_steps_synchronized": benchmark_callable(
-            unet_16_call, args.warmup, args.trials
+        "unet_configured_steps_synchronized": benchmark_callable(
+            unet_configured_steps_call, args.warmup, args.trials
         ),
-        "unet_16_steps_legacy_without_post_sync": benchmark_callable(
-            unet_16_call, args.warmup, args.trials, legacy=True
+        "unet_configured_steps_legacy_without_post_sync": benchmark_callable(
+            unet_configured_steps_call, args.warmup, args.trials, legacy=True
         ),
     }
 

@@ -90,6 +90,8 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
         guidance_grad_clip: float = 1.0,
         guidance_loss_power: float = 2.0,
         guidance_use_schedule: bool = True,
+        guidance_schedule_midpoint: float = 0.7,
+        guidance_schedule_steepness: float = 50.0,
         guidance_apply_last_step_only: bool = False,
         guidance_steps_per_denoise: int = 1,
         guidance_use_clean_sample: bool = False,
@@ -149,6 +151,8 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
         self.guidance_grad_clip = float(guidance_grad_clip)
         self.guidance_loss_power = float(guidance_loss_power)
         self.guidance_use_schedule = bool(guidance_use_schedule)
+        self.guidance_schedule_midpoint = float(guidance_schedule_midpoint)
+        self.guidance_schedule_steepness = float(guidance_schedule_steepness)
         self.guidance_apply_last_step_only = bool(guidance_apply_last_step_only)
         self.guidance_steps_per_denoise = int(max(guidance_steps_per_denoise, 1))
         self.guidance_use_clean_sample = bool(guidance_use_clean_sample)
@@ -706,6 +710,8 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
             n_steps,
             self.guidance_scale,
             use_schedule=self.guidance_use_schedule,
+            midpoint=self.guidance_schedule_midpoint,
+            steepness=self.guidance_schedule_steepness,
             dtype=dtype,
             device=device,
         )
@@ -1185,7 +1191,8 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
         chunk_start_pose: torch.Tensor = None,
         obstacle_info=None,
         current_joint_angles: Optional[torch.Tensor] = None,
-    ) -> Dict[str, torch.Tensor]:
+        return_debug: bool = False,
+    ) -> Dict[str, Any]:
         assert "past_action" not in obs_dict
 
         nobs = self.normalizer.normalize(obs_dict)
@@ -1217,7 +1224,7 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
         if chunk_start_pose is None:
             raise ValueError("chunk_start_pose must be provided for joint-space policy inference.")
 
-        nsample = self.conditional_sample(
+        sample_result = self.conditional_sample(
             condition_data=cond_data,
             condition_mask=cond_mask,
             local_cond=None,
@@ -1225,8 +1232,14 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
             chunk_start_pose=chunk_start_pose,
             obstacle_info=obstacle_info,
             current_joint_angles=current_joint_angles,
+            return_debug=return_debug,
             **self.kwargs,
         )
+        debug = None
+        if return_debug:
+            nsample, _, debug = sample_result
+        else:
+            nsample = sample_result
 
         if env_batched:
             assert nsample.shape == (B * env_batch_size, self.action_horizon, self.action_dim)
@@ -1250,6 +1263,8 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
         if joint_action_pred is not None:
             result["joint_action"] = joint_action_pred
             result["joint_action_pred"] = joint_action_pred
+        if debug is not None:
+            result["debug"] = debug
         return result
 
 

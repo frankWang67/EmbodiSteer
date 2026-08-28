@@ -5,11 +5,14 @@ schema_version: 1
 # output paths remain command-line arguments.
 policy:
   inference_space: joint
+  num_inference_steps: 16
 
   guidance:
     method: cbf
     scale: 1.0
     use_schedule: true
+    schedule_midpoint: 0.7
+    schedule_steepness: 50.0
     safety_margin: 0.05
     activation_distance: 1.0
     grad_clip: 0.1
@@ -25,6 +28,16 @@ policy:
     use_clean_sample: false
     apply_last_step_only: false
     reuse_jacobian: true
+    # End-effector collision geometry in metres, expressed in the tool frame.
+    eef_corner_points:
+      - [0.01, 0.043, 0.01]
+      - [0.01, -0.043, 0.01]
+      - [-0.01, 0.043, 0.01]
+      - [-0.01, -0.043, 0.01]
+      - [0.01, 0.043, -0.03]
+      - [0.01, -0.043, -0.03]
+      - [-0.01, 0.043, -0.03]
+      - [-0.01, -0.043, -0.03]
 
   baseline:
     method: ""

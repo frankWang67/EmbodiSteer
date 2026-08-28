@@ -97,8 +97,7 @@ python eval_real.py --help
 
 Checkpoint, environment, robot and output paths remain command-line arguments;
 inference space, guidance/CBF/SDF, IK, baseline and JM2D settings belong in the
-policy YAML for the supported joint/CBF and baseline paths. The Cartesian GD
-compatibility path still has implementation defaults documented in
+policy YAML, including the Cartesian GD collision geometry and schedule. See
 [`docs/policy_configuration.md`](docs/policy_configuration.md). Run simulation only after installing the pinned ManiSkill fork
 and providing a compatible checkpoint.
 

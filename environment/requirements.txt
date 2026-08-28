@@ -1,8 +1,7 @@
-torch==2.7.1 --index-url https://download.pytorch.org/whl/cu128
-torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cu128
-# Python, pip, CMake, llvm-openmp and ExifTool are conda-only; see
-# environment/dependencies.md.
-av==10.0.0
+torch==2.7.1+cu128 --index-url https://download.pytorch.org/whl/cu128
+torchvision==0.22.1+cu128 --index-url https://download.pytorch.org/whl/cu128
+# PyAV 10.0.0 is installed from conda-forge in environment.yaml because its
+# PyPI source distribution requires FFmpeg development headers.
 lmdb==1.4.1
 timm==0.9.7
 scikit-fda==0.9.1

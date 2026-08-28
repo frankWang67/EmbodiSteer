@@ -14,6 +14,10 @@ dependencies = []
 [project.optional-dependencies]
 dev = ["pytest>=7"]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = [".git", ".venv", "third_party"]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["embodisteer*", "diffusion_policy*", "umi*"]

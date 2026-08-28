@@ -10,6 +10,7 @@ accidental release input.
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -23,8 +24,24 @@ sys.path.insert(0, str(REPO_ROOT))
 from embodisteer.runtime import repository_root
 
 
-def _run(args: list[str], cwd: Path | None = None) -> str:
-    result = subprocess.run(args, cwd=cwd, check=True, text=True, capture_output=True)
+def _run(
+    args: list[str],
+    cwd: Path | None = None,
+    env: dict[str, str] | None = None,
+) -> str:
+    try:
+        result = subprocess.run(
+            args,
+            cwd=cwd,
+            check=True,
+            text=True,
+            capture_output=True,
+            env=env,
+        )
+    except subprocess.CalledProcessError as exc:
+        details = "\n".join(part for part in (exc.stdout, exc.stderr) if part)
+        command = " ".join(args)
+        raise SystemExit(f"command failed: {command}\n{details}".rstrip()) from exc
     return result.stdout.strip()
 
 
@@ -46,7 +63,11 @@ def validate_manifest(allow_pending: bool = False) -> list[str]:
     return errors
 
 
-def materialize(allow_pending: bool = False, install: bool = False) -> None:
+def materialize(
+    allow_pending: bool = False,
+    install: bool = False,
+    cuda_home: Path | None = None,
+) -> None:
     errors = validate_manifest(allow_pending=allow_pending)
     if errors:
         raise SystemExit("\n".join(errors))
@@ -74,7 +95,21 @@ def materialize(allow_pending: bool = False, install: bool = False) -> None:
 
         print(f"READY {name}: {commit}")
         if install:
-            _run(["python", "-m", "pip", "install", "-e", str(destination)])
+            install_args = [sys.executable, "-m", "pip", "install"]
+            install_env = None
+            if name == "curobo":
+                # cuRobo imports torch while defining its CUDA extensions.
+                # Build isolation may download a different torch/CUDA build,
+                # so compile against the already pinned runtime environment.
+                install_args.append("--no-build-isolation")
+                if cuda_home is not None:
+                    nvcc = cuda_home / "bin" / "nvcc"
+                    if not nvcc.is_file():
+                        raise SystemExit(f"CUDA toolkit compiler not found: {nvcc}")
+                    install_env = os.environ.copy()
+                    install_env["CUDA_HOME"] = str(cuda_home)
+            install_args.extend(["-e", str(destination)])
+            _run(install_args, env=install_env)
 
 
 def main() -> None:
@@ -82,6 +117,11 @@ def main() -> None:
     parser.add_argument("--check", action="store_true", help="validate only")
     parser.add_argument("--allow-pending", action="store_true", help="allow null commits for inspection")
     parser.add_argument("--install", action="store_true", help="pip install each materialized checkout")
+    parser.add_argument(
+        "--cuda-home",
+        type=Path,
+        help="CUDA toolkit root used to compile the pinned cuRobo extensions",
+    )
     args = parser.parse_args()
 
     errors = validate_manifest(allow_pending=args.allow_pending)
@@ -90,7 +130,11 @@ def main() -> None:
             raise SystemExit("\n".join(errors))
         print("third_party/manifest.yaml: OK")
         return
-    materialize(allow_pending=args.allow_pending, install=args.install)
+    materialize(
+        allow_pending=args.allow_pending,
+        install=args.install,
+        cuda_home=args.cuda_home,
+    )
 
 
 if __name__ == "__main__":

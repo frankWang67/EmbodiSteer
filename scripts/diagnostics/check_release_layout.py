@@ -113,13 +113,19 @@ def check_public_strings(root: Path) -> list[str]:
     for path in root.rglob("*"):
         if not path.is_file() or path.suffix.lower() not in TEXT_SUFFIXES:
             continue
-        if ignored_parts.intersection(path.parts):
+        relative_path = path.relative_to(root)
+        if ignored_parts.intersection(relative_path.parts):
+            continue
+        # The pinned forks are external dependencies materialized into this
+        # gitignored directory. Their upstream examples are not release text
+        # owned by this repository and must not affect the public-tree scan.
+        if relative_path.parts[:2] == ("third_party", "src"):
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
         for label, pattern in PUBLIC_STRING_PATTERNS.items():
             for match in pattern.finditer(text):
                 line_number = text.count("\n", 0, match.start()) + 1
-                errors.append(f"{path.relative_to(root)}:{line_number}: {label}")
+                errors.append(f"{relative_path}:{line_number}: {label}")
     return errors
 
 

@@ -27,6 +27,8 @@ def guidance_scale_at(
     use_schedule: bool,
     dtype: torch.dtype,
     device: torch.device,
+    midpoint: float = 0.7,
+    steepness: float = 50.0,
 ) -> torch.Tensor:
     """Evaluate the scalar guidance multiplier at a denoising index."""
     scale = torch.tensor(base_scale, device=device, dtype=dtype)
@@ -38,7 +40,9 @@ def guidance_scale_at(
     else:
         step = torch.tensor(float((num_steps - 1) - index), device=device, dtype=dtype)
         count = torch.tensor(float(num_steps - 1), device=device, dtype=dtype)
-    return scale * logistic_guidance_strength(step, count)
+    return scale * logistic_guidance_strength(
+        step, count, midpoint=midpoint, steepness=steepness
+    )
 
 
 __all__ = ["guidance_scale_at", "logistic_guidance_strength"]

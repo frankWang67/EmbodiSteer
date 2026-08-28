@@ -33,11 +33,15 @@ To materialize and install the exact forks into `third_party/src/`, run the
 explicit mutating form only after reviewing the manifest:
 
 ```console
-python scripts/bootstrap_third_party.py --install
+python scripts/bootstrap_third_party.py --install --cuda-home /usr/local/cuda
 ```
 
 ManiSkill and cuRobo are pinned to the commits recorded in the manifest. The
-bootstrap script installs only those revisions.
+bootstrap script installs only those revisions. Replace `/usr/local/cuda` with
+the host CUDA toolkit root containing `bin/nvcc`. cuRobo is compiled against
+the PyTorch already installed in the active environment, so the toolkit must
+use the same CUDA major version as that PyTorch build. If `CUDA_HOME` already
+points to the correct toolkit, `--cuda-home` may be omitted.
 
 ## Local package
 

@@ -19,11 +19,12 @@ Dependencies are split across three sources:
 `environment/requirements.txt` mirrors the pip portion for users who maintain a
 pip-based installation workflow. New installations should use the conda YAML.
 
-Python, pip, CMake, LLVM OpenMP and ExifTool intentionally remain in the conda
-portion only. CMake and LLVM OpenMP are native build/runtime constraints, while
-PyExifTool invokes the separately installed ExifTool executable. They therefore
-do not appear in `requirements.txt`, whose scope is Python packages that
-pip can install.
+Python, pip, PyAV, CMake, LLVM OpenMP and ExifTool intentionally remain in the
+conda portion only. CMake and LLVM OpenMP are native build/runtime constraints,
+while PyAV requires FFmpeg libraries and PyExifTool invokes the separately
+installed ExifTool executable. They therefore do not appear in
+`requirements.txt`, whose scope is Python packages that pip can install without
+native system headers.
 
 ## Runtime versions
 

@@ -18,6 +18,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .venv/
+*.egg-info/
 
 # Internal planning and audit notes are kept locally and are not release files.
 .codex/

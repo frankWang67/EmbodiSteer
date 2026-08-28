@@ -15,8 +15,8 @@ from diffusion_policy.common.pytorch_util import dict_apply
 from embodisteer.guidance.diffusion import (
     get_pred_x0,
     rel_action_obstacle_loss,
-    get_guidance_strength,
 )
+from embodisteer.guidance.schedule import guidance_scale_at
 
 
 class DiffusionUnetTimmPolicyEESpace(BaseImagePolicy):
@@ -54,6 +54,13 @@ class DiffusionUnetTimmPolicyEESpace(BaseImagePolicy):
             inpaint_fixed_action_prefix=False,
             train_diffusion_n_samples=1,
             use_ee_guidance=False,
+            guidance_scale=1.0,
+            guidance_use_schedule=True,
+            guidance_schedule_midpoint=0.7,
+            guidance_schedule_steepness=50.0,
+            guidance_safety_margin=0.04,
+            guidance_grad_clip=0.1,
+            eef_corner_points=None,
             # parameters passed to step
             **kwargs
         ):
@@ -94,6 +101,18 @@ class DiffusionUnetTimmPolicyEESpace(BaseImagePolicy):
         self.inpaint_fixed_action_prefix = inpaint_fixed_action_prefix
         self.train_diffusion_n_samples = int(train_diffusion_n_samples)
         self.use_ee_guidance = bool(use_ee_guidance)
+        self.guidance_scale = float(guidance_scale)
+        self.guidance_use_schedule = bool(guidance_use_schedule)
+        self.guidance_schedule_midpoint = float(guidance_schedule_midpoint)
+        self.guidance_schedule_steepness = float(guidance_schedule_steepness)
+        self.guidance_safety_margin = float(guidance_safety_margin)
+        self.guidance_grad_clip = float(guidance_grad_clip)
+        if eef_corner_points is None:
+            self.eef_corner_pts = self.eef_corner_pts.clone()
+        else:
+            self.eef_corner_pts = torch.as_tensor(
+                eef_corner_points, dtype=torch.float32
+            )
         self.kwargs = kwargs
 
         if num_inference_steps is None:
@@ -131,7 +150,8 @@ class DiffusionUnetTimmPolicyEESpace(BaseImagePolicy):
 
         scheduler.set_timesteps(self.num_inference_steps)
 
-        for t in scheduler.timesteps:
+        timesteps = list(scheduler.timesteps)
+        for idx, t in enumerate(timesteps):
             # 1. apply conditioning
             trajectory[condition_mask] = condition_data[condition_mask]
 
@@ -154,14 +174,26 @@ class DiffusionUnetTimmPolicyEESpace(BaseImagePolicy):
                         current_state=chunk_start_pose,
                         robot_corners=self.eef_corner_pts,
                         obstacles=obstacle_info,
+                        safety_margin=self.guidance_safety_margin,
                     )
 
                     grad = torch.autograd.grad(loss, x_in, allow_unused=True)[0]
                     if grad is None:
                         grad = torch.zeros_like(x_in)
-                    grad = torch.clamp(grad, -0.1, 0.1)
+                    grad = torch.clamp(
+                        grad, -self.guidance_grad_clip, self.guidance_grad_clip
+                    )
 
-                gamma = get_guidance_strength(t, self.num_inference_steps)
+                gamma = guidance_scale_at(
+                    idx,
+                    len(timesteps),
+                    self.guidance_scale,
+                    use_schedule=self.guidance_use_schedule,
+                    midpoint=self.guidance_schedule_midpoint,
+                    steepness=self.guidance_schedule_steepness,
+                    dtype=trajectory.dtype,
+                    device=trajectory.device,
+                )
             else:
                 grad = None
                 gamma = None

@@ -53,6 +53,7 @@ from embodisteer.adapters.real import (
 )
 from embodisteer.runtime_config import (
     PolicyConfigError,
+    ee_policy_overrides,
     joint_policy_overrides,
     load_policy_config,
 )
@@ -267,7 +268,10 @@ def main(input, output, robot_config,
             'EmbodiSteerEESpacePolicy'
         )
         with open_dict(cfg.policy):
-            cfg.policy.use_ee_guidance = guidance == 'gd'
+            for key, value in ee_policy_overrides(policy_settings).items():
+                cfg.policy[key] = value
+    with open_dict(cfg.policy):
+        cfg.policy.num_inference_steps = policy_settings['num_inference_steps']
     print("policy_config:", policy_settings['config_path'])
     print(
         "method:",
@@ -366,7 +370,6 @@ def main(input, output, robot_config,
             policy = workspace.model
             if cfg.training.use_ema:
                 policy = workspace.ema_model
-            policy.num_inference_steps = 16 # DDIM inference iterations
             obs_pose_rep = cfg.task.pose_repr.obs_pose_repr
             action_pose_repr = cfg.task.pose_repr.action_pose_repr
             print('obs_pose_rep', obs_pose_rep)

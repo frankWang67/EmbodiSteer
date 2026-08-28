@@ -17,8 +17,10 @@ root by the shared loader.
 Algorithm settings belong in the policy YAML:
 
 - Cartesian or joint inference;
+- the number of diffusion inference steps;
 - CBF, gradient, or no guidance;
-- guidance schedule, safety margin, SDF reduction and task weights;
+- guidance scale and schedule shape, safety margin, gradient clamp,
+  end-effector collision points, SDF reduction and task weights;
 - standard or reverse CBF settings;
 - Jacobian damping, initialization noise and optional IK refinement; and
 - post-hoc CBF, batch-sampling and JM2D baseline settings.
@@ -58,12 +60,10 @@ joint-space CBF without a baseline, and a baseline cannot be combined with
 per-step guidance. Real-world evaluation currently rejects baseline profiles;
 baseline evaluation is a simulation-only path.
 
-The checked-in paper profile (joint-space CBF) is fully wired to the unified
-policy. Cartesian `gd` guidance remains a compatibility path: its corner-point
-geometry, gradient clamp and logistic schedule are still implementation
-defaults rather than independently configurable YAML fields. These values are
-listed in the internal phase-3 audit and must be either wired into the schema or
-explicitly removed from the supported profile before publication.
+The checked-in paper profile (joint-space CBF) and Cartesian `gd` guidance use
+the same validated fields. The three launchers and the timing/JM2D diagnostics
+all read `num_inference_steps` and guidance hyperparameters from the selected
+policy YAML; they do not overwrite them with launcher-specific defaults.
 
 To create an ablation, copy a checked-in profile, change the relevant YAML
 fields, and preserve the exact file with the experiment results. This records

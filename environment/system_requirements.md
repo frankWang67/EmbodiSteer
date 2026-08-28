@@ -9,6 +9,9 @@ of scope for the current release pass.
 - Ubuntu 22.04 is the currently tested host.
 - Python 3.10 is the target interpreter for the EmbodiSteer environment.
 - A CUDA-capable GPU is required for diffusion inference and cuRobo guidance.
+- Installing cuRobo requires a CUDA toolkit with `bin/nvcc`; pass its root to
+  `scripts/bootstrap_third_party.py --install --cuda-home <path>`. The toolkit
+  must use the same CUDA major version as the installed PyTorch build.
 - `environment.yaml` and `requirements.txt` record the supported direct
   runtime, including NumPy 1.26.4, SciPy 1.15.3, Numba 0.65.0 and
   pytorch-kinematics 0.10.0. They are not a solver-generated lockfile; the

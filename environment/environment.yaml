@@ -5,15 +5,17 @@ channels:
 dependencies:
   - python=3.10.14
   - pip=22.1.2
+  # PyAV 10 has a compiled conda-forge build; the PyPI source distribution
+  # requires system FFmpeg development headers during environment creation.
+  - av=10.0.0
   # cuRobo build tooling needs a conservative CMake range.
   - cmake<3.28
   # trick to avoid cpu affinity issue described in https://github.com/pytorch/pytorch/issues/99625
   - llvm-openmp=14
   - exiftool=12.76
   - pip:
-    - torch==2.7.1 --index-url https://download.pytorch.org/whl/cu128
-    - torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cu128
-    - av==10.0.0
+    - torch==2.7.1+cu128 --index-url https://download.pytorch.org/whl/cu128
+    - torchvision==0.22.1+cu128 --index-url https://download.pytorch.org/whl/cu128
     - scikit-video==1.1.11
     - lmdb==1.4.1
     - timm==0.9.7

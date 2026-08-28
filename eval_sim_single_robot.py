@@ -25,6 +25,7 @@ from omegaconf import OmegaConf
 from omegaconf import open_dict
 from embodisteer.runtime_config import (
     PolicyConfigError,
+    ee_policy_overrides,
     joint_policy_overrides,
     load_policy_config,
 )
@@ -139,28 +140,10 @@ def main(
     jm2d_temperature = policy_settings['jm2d_temperature']
     jm2d_eta = policy_settings['jm2d_eta']
     guidance_cbf_reverse_task_threshold = policy_settings['guidance_cbf_reverse_task_threshold']
-    # load checkpoint
-    exp_path = input
-    if os.path.isfile(input):
-        ckpt_path = input
-        exp_path = os.path.dirname(os.path.dirname(ckpt_path))
-    else:
-        ckpt_path = os.path.join(exp_path, 'ckpt', ckpt_filename)
-        if not (ckpt_path.endswith('.ckpt') or ckpt_path.endswith('.pth')):
-            ckpt_path_ckpt = ckpt_path + '.ckpt'
-            ckpt_path_pth = ckpt_path + '.pth'
-            if os.path.exists(ckpt_path_ckpt):
-                ckpt_path = ckpt_path_ckpt
-            elif os.path.exists(ckpt_path_pth):
-                ckpt_path = ckpt_path_pth
-            else:
-                ckpt_path = ckpt_path_ckpt
-    assert os.path.exists(ckpt_path), f"Checkpoint {ckpt_path} does not exist."
-    payload = torch.load(open(ckpt_path, 'rb'), map_location='cpu', pickle_module=dill)
-    cfg = payload['cfg']
-    if steps_per_inference <= 0:
-        steps_per_inference = int(cfg.task.action_horizon)
 
+    # Validate method/runtime combinations before touching checkpoint data or
+    # creating a simulation environment. Configuration mistakes should remain
+    # deterministic and safe even when the checkpoint path is unavailable.
     use_baseline = (baseline_method != '')
     use_guidance = (guidance != '')
     use_reverse_cbf = (guidance_cbf_reverse_task_threshold is not None)
@@ -172,7 +155,6 @@ def main(
             "Joint-space and baseline policy configs require a pd_joint* "
             "control mode so the configured joint trajectory is executed."
         )
-    # Whether the policy needs obstacle info (drives chunk_pose + obstacle_info fetch).
     policy_needs_obstacles = use_baseline or use_guidance
     if policy_needs_obstacles and not obstacle:
         raise click.BadParameter(
@@ -197,6 +179,28 @@ def main(
                 "--obstacle-observation-noise requires guidance or a baseline "
                 "in --policy-config."
             )
+
+    # load checkpoint
+    exp_path = input
+    if os.path.isfile(input):
+        ckpt_path = input
+        exp_path = os.path.dirname(os.path.dirname(ckpt_path))
+    else:
+        ckpt_path = os.path.join(exp_path, 'ckpt', ckpt_filename)
+        if not (ckpt_path.endswith('.ckpt') or ckpt_path.endswith('.pth')):
+            ckpt_path_ckpt = ckpt_path + '.ckpt'
+            ckpt_path_pth = ckpt_path + '.pth'
+            if os.path.exists(ckpt_path_ckpt):
+                ckpt_path = ckpt_path_ckpt
+            elif os.path.exists(ckpt_path_pth):
+                ckpt_path = ckpt_path_pth
+            else:
+                ckpt_path = ckpt_path_ckpt
+    assert os.path.exists(ckpt_path), f"Checkpoint {ckpt_path} does not exist."
+    payload = torch.load(open(ckpt_path, 'rb'), map_location='cpu', pickle_module=dill)
+    cfg = payload['cfg']
+    if steps_per_inference <= 0:
+        steps_per_inference = int(cfg.task.action_horizon)
 
     robot_cfg_name_map = {
         'panda_robotiq_wristcam': 'panda_robotiq_wristcam.yml',
@@ -259,7 +263,12 @@ def main(
             'EmbodiSteerEESpacePolicy'
         )
         with open_dict(cfg.policy):
-            cfg.policy.use_ee_guidance = (guidance == 'gd')
+            for key, value in ee_policy_overrides(policy_settings).items():
+                cfg.policy[key] = value
+    # Ensure every target (including legacy checkpoint configs) receives the
+    # canonical inference step count from the selected policy profile.
+    with open_dict(cfg.policy):
+        cfg.policy.num_inference_steps = policy_settings['num_inference_steps']
     print("policy_config:", policy_settings['config_path'])
     print(
         "method:",
@@ -354,7 +363,6 @@ def main(
     policy = workspace.model
     if cfg.training.use_ema:
         policy = workspace.ema_model
-    policy.num_inference_steps = 16 # DDIM inference iterations
     obs_pose_rep = cfg.task.pose_repr.obs_pose_repr
     action_pose_repr = cfg.task.pose_repr.action_pose_repr
     print('obs_pose_rep', obs_pose_rep)

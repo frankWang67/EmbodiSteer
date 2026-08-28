@@ -5,6 +5,7 @@ import tempfile
 from embodisteer.runtime_config import (
     DEFAULT_POLICY_CONFIG,
     PolicyConfigError,
+    ee_policy_overrides,
     joint_policy_overrides,
     load_policy_config,
     validate_policy_config,
@@ -22,6 +23,8 @@ def test_checked_in_policy_profiles_load():
         "cbf",
     )
     assert (ee["inference_space"], ee["guidance"]) == ("ee", "")
+    assert embodisteer["num_inference_steps"] == 16
+    assert ee["num_inference_steps"] == 16
 
 
 def test_joint_overrides_include_configured_guidance_and_ik_values():
@@ -30,8 +33,46 @@ def test_joint_overrides_include_configured_guidance_and_ik_values():
     assert overrides["guidance_method"] == "cbf"
     assert overrides["guidance_use_schedule"] is True
     assert overrides["guidance_steps_per_denoise"] == 1
+    assert overrides["num_inference_steps"] == 16
+    assert overrides["guidance_schedule_midpoint"] == 0.7
+    assert overrides["guidance_schedule_steepness"] == 50.0
     assert overrides["jacobian_damping"] == 0.001
     assert overrides["noise_init_mode"] == "jacobian_projected"
+
+
+def test_ee_overrides_include_all_cartesian_guidance_values():
+    values = deepcopy(DEFAULT_POLICY_CONFIG)
+    values.update(
+        {
+            "guidance": "gd",
+            "num_inference_steps": 12,
+            "guidance_scale": 1.25,
+            "guidance_safety_margin": 0.03,
+            "guidance_grad_clip": 0.07,
+            "guidance_schedule_midpoint": 0.4,
+            "guidance_schedule_steepness": 20.0,
+        }
+    )
+    overrides = ee_policy_overrides(values)
+    assert overrides["use_ee_guidance"] is True
+    assert overrides["num_inference_steps"] == 12
+    assert overrides["guidance_scale"] == 1.25
+    assert overrides["guidance_safety_margin"] == 0.03
+    assert overrides["guidance_grad_clip"] == 0.07
+    assert overrides["guidance_schedule_midpoint"] == 0.4
+    assert overrides["guidance_schedule_steepness"] == 20.0
+    assert len(overrides["eef_corner_points"]) == 8
+
+
+def test_invalid_inference_step_count_is_rejected():
+    values = deepcopy(DEFAULT_POLICY_CONFIG)
+    values["num_inference_steps"] = 0
+    try:
+        validate_policy_config(values)
+    except PolicyConfigError as exc:
+        assert "num_inference_steps" in str(exc)
+    else:
+        raise AssertionError("zero inference steps were accepted")
 
 
 def test_invalid_method_combination_is_rejected():

@@ -8,6 +8,7 @@ file and are normalized here so the three launchers cannot silently drift.
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -18,6 +19,7 @@ from .runtime import repository_root
 
 DEFAULT_POLICY_CONFIG: dict[str, Any] = {
     "inference_space": "ee",
+    "num_inference_steps": 16,
     "guidance": "",
     "baseline_method": "",
     "batch_sampling_num": 32,
@@ -26,6 +28,8 @@ DEFAULT_POLICY_CONFIG: dict[str, Any] = {
     "jm2d_eta": 1.0,
     "guidance_scale": 1.0,
     "guidance_use_schedule": True,
+    "guidance_schedule_midpoint": 0.7,
+    "guidance_schedule_steepness": 50.0,
     "guidance_safety_margin": 0.05,
     "guidance_activation_distance": 1.0,
     "guidance_grad_clip": 0.1,
@@ -41,6 +45,16 @@ DEFAULT_POLICY_CONFIG: dict[str, Any] = {
     "guidance_use_clean_sample": False,
     "guidance_apply_last_step_only": False,
     "guidance_reuse_jacobian": True,
+    "guidance_eef_corner_points": [
+        [0.01, 0.043, 0.01],
+        [0.01, -0.043, 0.01],
+        [-0.01, 0.043, 0.01],
+        [-0.01, -0.043, 0.01],
+        [0.01, 0.043, -0.03],
+        [0.01, -0.043, -0.03],
+        [-0.01, 0.043, -0.03],
+        [-0.01, -0.043, -0.03],
+    ],
     "jacobian_damping": 0.001,
     "ik_refine_each_step": False,
     "ik_refine_last_step": False,
@@ -55,6 +69,7 @@ DEFAULT_POLICY_CONFIG: dict[str, Any] = {
 }
 
 JOINT_POLICY_KEYS = (
+    "num_inference_steps",
     "jacobian_damping",
     "ik_refine_each_step",
     "ik_refine_last_step",
@@ -68,6 +83,8 @@ JOINT_POLICY_KEYS = (
     "cartesian_delta_mode",
     "guidance_scale",
     "guidance_use_schedule",
+    "guidance_schedule_midpoint",
+    "guidance_schedule_steepness",
     "guidance_safety_margin",
     "guidance_activation_distance",
     "guidance_grad_clip",
@@ -261,6 +278,13 @@ def validate_policy_config(values: Mapping[str, Any]) -> None:
     baseline = str(values.get("baseline_method", "")).lower().strip()
     if inference_space not in ("ee", "joint"):
         raise PolicyConfigError("policy.inference_space must be 'ee' or 'joint'")
+    num_inference_steps = values["num_inference_steps"]
+    if (
+        isinstance(num_inference_steps, bool)
+        or not isinstance(num_inference_steps, int)
+        or num_inference_steps < 1
+    ):
+        raise PolicyConfigError("policy.num_inference_steps must be at least 1")
     if guidance not in ("", "cbf", "gd"):
         raise PolicyConfigError("policy.guidance.method must be '', 'cbf' or 'gd'")
     if baseline not in ("", "post_hoc_cbf", "batch_sampling", "jm2d"):
@@ -312,6 +336,10 @@ def validate_policy_config(values: Mapping[str, Any]) -> None:
         raise PolicyConfigError("guidance.grad_clip must be non-negative")
     if float(values["guidance_scale"]) < 0:
         raise PolicyConfigError("guidance.scale must be non-negative")
+    if not 0.0 <= float(values["guidance_schedule_midpoint"]) <= 1.0:
+        raise PolicyConfigError("guidance.schedule_midpoint must be in [0, 1]")
+    if float(values["guidance_schedule_steepness"]) <= 0:
+        raise PolicyConfigError("guidance.schedule_steepness must be positive")
     if float(values["guidance_task_pos_weight"]) <= 0:
         raise PolicyConfigError("guidance.task_pos_weight must be positive")
     if float(values["guidance_task_rot_weight"]) < 0:
@@ -330,6 +358,18 @@ def validate_policy_config(values: Mapping[str, Any]) -> None:
         raise PolicyConfigError("ik.init_noise_scale must be non-negative")
     if float(values["jac_noise_alpha"]) < 0:
         raise PolicyConfigError("ik.jac_noise_alpha must be non-negative")
+    corners = values["guidance_eef_corner_points"]
+    if not isinstance(corners, (list, tuple)) or len(corners) < 1:
+        raise PolicyConfigError("guidance.eef_corner_points must be a non-empty list")
+    for corner in corners:
+        if not isinstance(corner, (list, tuple)) or len(corner) != 3:
+            raise PolicyConfigError("guidance.eef_corner_points entries must have 3 values")
+        try:
+            finite = all(math.isfinite(float(component)) for component in corner)
+        except (TypeError, ValueError):
+            finite = False
+        if not finite:
+            raise PolicyConfigError("guidance.eef_corner_points must contain finite values")
     for key in (
         "guidance_use_schedule",
         "guidance_use_clean_sample",
@@ -360,9 +400,26 @@ def joint_policy_overrides(values: Mapping[str, Any]) -> dict[str, Any]:
     return overrides
 
 
+def ee_policy_overrides(values: Mapping[str, Any]) -> dict[str, Any]:
+    """Return shared inference and Cartesian-guidance constructor arguments."""
+
+    return {
+        "num_inference_steps": values["num_inference_steps"],
+        "use_ee_guidance": values["guidance"] == "gd",
+        "guidance_scale": values["guidance_scale"],
+        "guidance_use_schedule": values["guidance_use_schedule"],
+        "guidance_schedule_midpoint": values["guidance_schedule_midpoint"],
+        "guidance_schedule_steepness": values["guidance_schedule_steepness"],
+        "guidance_safety_margin": values["guidance_safety_margin"],
+        "guidance_grad_clip": values["guidance_grad_clip"],
+        "eef_corner_points": values["guidance_eef_corner_points"],
+    }
+
+
 __all__ = [
     "DEFAULT_POLICY_CONFIG",
     "PolicyConfigError",
+    "ee_policy_overrides",
     "joint_policy_overrides",
     "load_policy_config",
     "validate_policy_config",

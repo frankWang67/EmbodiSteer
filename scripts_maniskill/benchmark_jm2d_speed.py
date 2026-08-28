@@ -38,6 +38,11 @@ from diffusion_policy.workspace.base_workspace import BaseWorkspace
 from mani_skill.utils.wrappers.flatten import FlattenRGBDObservationWrapper
 from scripts_maniskill.utils import make_eval_envs, maniskill_to_umi_env_obs
 from umi.real_world.real_inference_util import get_real_umi_obs_dict
+from embodisteer.runtime_config import (
+    ee_policy_overrides,
+    joint_policy_overrides,
+    load_policy_config,
+)
 
 
 OmegaConf.register_new_resolver("eval", eval, replace=True)
@@ -47,7 +52,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--checkpoint",
-        default="scripts_maniskill/evals/PickPlaceToasterToCounter_0512/ckpt/latest.ckpt",
+        required=True,
     )
     parser.add_argument(
         "--benchmark-input",
@@ -61,11 +66,23 @@ def parse_args():
     parser.add_argument("--warmup", type=int, default=3)
     parser.add_argument("--trials", type=int, default=20)
     parser.add_argument("--seed", type=int, default=2022)
-    parser.add_argument("--jm2d-num-samples", type=int, default=16)
-    parser.add_argument("--physical-gpu-index", type=int, default=4)
+    parser.add_argument(
+        "--policy-config",
+        default=str(ROOT_DIR / "configs" / "policy" / "embodisteer.yaml"),
+        help="Canonical policy YAML supplying all algorithm hyperparameters.",
+    )
+    parser.add_argument(
+        "--physical-gpu-index",
+        type=int,
+        default=None,
+        help="NVML physical GPU index; required unless --allow-shared-gpu is used.",
+    )
     parser.add_argument("--exclusive-poll-interval", type=float, default=0.05)
     parser.add_argument("--allow-shared-gpu", action="store_true")
-    return parser.parse_args()
+    args = parser.parse_args()
+    if not args.allow_shared_gpu and args.physical_gpu_index is None:
+        parser.error("--physical-gpu-index is required unless --allow-shared-gpu is used")
+    return args
 
 
 class GPUExclusivityMonitor:
@@ -283,34 +300,27 @@ def add_robot_config(cfg, include_robot_uid=True):
         cfg.policy.ee_link_name = ee_link_name
         if arm_dof is not None:
             cfg.policy.arm_dof = arm_dof
-        cfg.policy.ik_refine_last_step = False
-        cfg.policy.cartesian_delta_mode = "geometric"
 
 
-def add_robot_and_guidance_config(cfg, guidance_scale):
+def add_robot_and_guidance_config(cfg, policy_settings):
     add_robot_config(cfg)
     with open_dict(cfg.policy):
-        cfg.policy.guidance_scale = guidance_scale
-        cfg.policy.guidance_use_schedule = True
-        cfg.policy.guidance_safety_margin = 0.05
-        cfg.policy.guidance_activation_distance = 1.0
-        cfg.policy.guidance_grad_clip = 0.1
-        cfg.policy.guidance_sdf_agg = "topk"
-        cfg.policy.guidance_sdf_softmax_temp = 20.0
-        cfg.policy.guidance_sdf_topk = 4
-        cfg.policy.guidance_task_pos_weight = 1.0
-        cfg.policy.guidance_task_rot_weight = 0.1
-        cfg.policy.guidance_cbf_lambda = 0.01
+        for key, value in joint_policy_overrides(policy_settings).items():
+            cfg.policy[key] = value
 
 
-def configure_method(base_cfg, method, jm2d_num_samples):
+def configure_method(base_cfg, method, policy_settings):
     cfg = copy.deepcopy(base_cfg)
+    with open_dict(cfg.policy):
+        cfg.policy.num_inference_steps = policy_settings["num_inference_steps"]
     if method == "vanilla":
         cfg.policy._target_ = (
             "embodisteer.policies.ee_space."
             "EmbodiSteerEESpacePolicy"
         )
         with open_dict(cfg.policy):
+            for key, value in ee_policy_overrides(policy_settings).items():
+                cfg.policy[key] = value
             cfg.policy.use_ee_guidance = False
     elif method == "joint_space_no_guidance":
         cfg.policy._target_ = (
@@ -318,14 +328,18 @@ def configure_method(base_cfg, method, jm2d_num_samples):
             "EmbodiSteerJointPolicy"
         )
         add_robot_config(cfg, include_robot_uid=False)
+        with open_dict(cfg.policy):
+            for key, value in joint_policy_overrides(policy_settings).items():
+                cfg.policy[key] = value
+            cfg.policy.guidance_method = ""
     elif method == "embodisteer":
         cfg.policy._target_ = (
             "embodisteer.policies.ee2joint."
             "EmbodiSteerJointPolicy"
         )
-        add_robot_and_guidance_config(cfg, guidance_scale=1.5)
+        add_robot_and_guidance_config(cfg, policy_settings)
         with open_dict(cfg.policy):
-            cfg.policy.guidance_method = "cbf"
+            cfg.policy.guidance_method = policy_settings["guidance"]
             cfg.policy.guidance_use_clean_sample = False
             cfg.policy.guidance_apply_last_step_only = False
     elif method.startswith("batch_sampling_"):
@@ -334,7 +348,7 @@ def configure_method(base_cfg, method, jm2d_num_samples):
             "embodisteer.policies.baselines."
             "DiffusionUnetTimmPolicyBaseline"
         )
-        add_robot_and_guidance_config(cfg, guidance_scale=1.0)
+        add_robot_and_guidance_config(cfg, policy_settings)
         with open_dict(cfg.policy):
             cfg.policy.baseline_method = "batch_sampling"
             cfg.policy.batch_sampling_num = num_samples
@@ -344,24 +358,28 @@ def configure_method(base_cfg, method, jm2d_num_samples):
             "embodisteer.policies.jm2d."
             "DiffusionUnetTimmPolicyJM2D"
         )
-        add_robot_and_guidance_config(cfg, guidance_scale=1.0)
+        add_robot_and_guidance_config(cfg, policy_settings)
         with open_dict(cfg.policy):
             cfg.policy.jm2d_num_samples = num_samples
-            cfg.policy.jm2d_temperature = 0.01
-            cfg.policy.jm2d_eta = 1.0
+            cfg.policy.jm2d_temperature = policy_settings["jm2d_temperature"]
+            cfg.policy.jm2d_eta = policy_settings["jm2d_eta"]
     else:
         raise ValueError(method)
     return cfg
 
 
-def load_policy(payload, cfg, device, method):
+def load_policy(payload, cfg, device, method, policy_settings):
     workspace_cls = hydra.utils.get_class(cfg._target_)
     workspace = workspace_cls(cfg)
     workspace: BaseWorkspace
     workspace.load_payload(payload, exclude_keys=None, include_keys=None)
     policy = workspace.ema_model if cfg.training.use_ema else workspace.model
     jm2d_config = parse_jm2d_method(method)
-    policy.num_inference_steps = 16 if jm2d_config is None else jm2d_config[1]
+    policy.num_inference_steps = (
+        policy_settings["num_inference_steps"]
+        if jm2d_config is None
+        else jm2d_config[1]
+    )
     policy.eval().to(device)
     return workspace, policy
 
@@ -393,12 +411,12 @@ def benchmark_method(
     warmup,
     trials,
     seed,
-    jm2d_num_samples,
+    policy_settings,
     device,
     exclusivity_monitor,
 ):
-    cfg = configure_method(base_cfg, method, jm2d_num_samples)
-    workspace, policy = load_policy(payload, cfg, device, method)
+    cfg = configure_method(base_cfg, method, policy_settings)
+    workspace, policy = load_policy(payload, cfg, device, method, policy_settings)
     benchmark_input = {
         "obs_dict": dict_apply(
             benchmark_input_cpu["obs_dict_cpu"], lambda x: x.to(device)
@@ -484,6 +502,7 @@ def benchmark_method(
 
 def main():
     args = parse_args()
+    policy_settings = load_policy_config(args.policy_config)
     checkpoint = Path(args.checkpoint).resolve()
     output = Path(args.output).resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -523,6 +542,31 @@ def main():
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is required")
 
+    method_order = [
+        "vanilla",
+        "joint_space_no_guidance",
+        "embodisteer",
+        "batch_sampling_4",
+        "batch_sampling_8",
+        "batch_sampling_16",
+        "batch_sampling_32",
+        "jm2d_n4_i16",
+        "jm2d_n8_i16",
+        "jm2d_n16_i16",
+        "jm2d_n32_i16",
+        "jm2d_n16_i4",
+        "jm2d_n16_i8",
+        "jm2d_n16_i12",
+    ]
+    jm2d_reference = (
+        f"jm2d_n{policy_settings['jm2d_num_samples']}_"
+        f"i{policy_settings['num_inference_steps']}"
+    )
+    # Keep the standard comparison methods, but always include the configured
+    # JM2D reference when a profile changes sample count or inference steps.
+    if jm2d_reference not in method_order:
+        method_order.append(jm2d_reference)
+
     report = {
         "timestamp": dt.datetime.now().astimezone().isoformat(),
         "checkpoint": str(checkpoint),
@@ -545,7 +589,8 @@ def main():
             simulation_created_in_benchmark_process
         ),
         "action_horizon": int(base_cfg.task.action_horizon),
-        "default_diffusion_steps": 16,
+        "default_diffusion_steps": policy_settings["num_inference_steps"],
+        "policy_config": policy_settings["config_path"],
         "timing_scope": (
             "policy.predict_action wall time with torch.cuda.synchronize() "
             "immediately before and after every measured call"
@@ -561,22 +606,7 @@ def main():
             "nvml_poll_interval_s": args.exclusive_poll_interval,
             "allowed_compute_pid": os.getpid(),
         },
-        "method_order": [
-            "vanilla",
-            "joint_space_no_guidance",
-            "embodisteer",
-            "batch_sampling_4",
-            "batch_sampling_8",
-            "batch_sampling_16",
-            "batch_sampling_32",
-            "jm2d_n4_i16",
-            "jm2d_n8_i16",
-            "jm2d_n16_i16",
-            "jm2d_n32_i16",
-            "jm2d_n16_i4",
-            "jm2d_n16_i8",
-            "jm2d_n16_i12",
-        ],
+        "method_order": method_order,
         "method_configs": {
             "vanilla": {
                 "space": "Cartesian",
@@ -593,13 +623,13 @@ def main():
                 "policy_class": (
                     "DiffusionUnetTimmPolicyJointSpaceWithGuidance"
                 ),
-                "guidance_scale": 1.5,
-                "guidance_safety_margin": 0.05,
-                "guidance_activation_distance": 1.0,
-                "guidance_grad_clip": 0.1,
-                "guidance_cbf_lambda": 0.01,
-                "guidance_task_pos_weight": 1.0,
-                "guidance_task_rot_weight": 0.1,
+                "guidance_scale": policy_settings["guidance_scale"],
+                "guidance_safety_margin": policy_settings["guidance_safety_margin"],
+                "guidance_activation_distance": policy_settings["guidance_activation_distance"],
+                "guidance_grad_clip": policy_settings["guidance_grad_clip"],
+                "guidance_cbf_lambda": policy_settings["guidance_cbf_lambda"],
+                "guidance_task_pos_weight": policy_settings["guidance_task_pos_weight"],
+                "guidance_task_rot_weight": policy_settings["guidance_task_rot_weight"],
             },
             "batch_sampling_4": {
                 "space": "Cartesian samples with post-hoc IK/SDF selection",
@@ -631,20 +661,22 @@ def main():
             "space": "Cartesian diffusion with IK/SDF importance weighting",
             "num_samples": num_samples,
             "diffusion_steps": num_steps,
-            "temperature": 0.01,
-            "ddim_eta": 1.0,
+            "temperature": policy_settings["jm2d_temperature"],
+            "ddim_eta": policy_settings["jm2d_eta"],
             "final_post_hoc_cbf": True,
-            "guidance_safety_margin": 0.05,
-            "guidance_activation_distance": 1.0,
-            "guidance_cbf_lambda": 0.01,
-            "guidance_task_pos_weight": 1.0,
-            "guidance_task_rot_weight": 0.1,
+            "guidance_safety_margin": policy_settings["guidance_safety_margin"],
+            "guidance_activation_distance": policy_settings["guidance_activation_distance"],
+            "guidance_cbf_lambda": policy_settings["guidance_cbf_lambda"],
+            "guidance_task_pos_weight": policy_settings["guidance_task_pos_weight"],
+            "guidance_task_rot_weight": policy_settings["guidance_task_rot_weight"],
             "sequential_clean_rollout_unet_stages": rollout_stages,
             "candidate_sample_forward_equivalents": (
                 num_samples * rollout_stages
             ),
-            "relative_model_sample_work_vs_vanilla_16_step": (
-                num_samples * rollout_stages / 16.0
+            "relative_model_sample_work_vs_vanilla": (
+                num_samples
+                * rollout_stages
+                / float(policy_settings["num_inference_steps"])
             ),
             "candidate_pose_ik_targets_per_call": (
                 num_samples * num_steps * int(base_cfg.task.action_horizon)
@@ -670,7 +702,7 @@ def main():
                 warmup=args.warmup,
                 trials=args.trials,
                 seed=args.seed,
-                jm2d_num_samples=args.jm2d_num_samples,
+                policy_settings=policy_settings,
                 device=device,
                 exclusivity_monitor=exclusivity_monitor,
             )
@@ -679,7 +711,11 @@ def main():
         if exclusivity_monitor is not None:
             exclusivity_monitor.stop()
 
-    jm2d_reference = "jm2d_n16_i16"
+    if jm2d_reference not in report["methods"]:
+        raise RuntimeError(
+            "The configured JM2D reference was not benchmarked: "
+            f"{jm2d_reference}"
+        )
     report["jm2d_reference_method"] = jm2d_reference
     jm2d_mean = report["methods"][jm2d_reference]["mean_s"]
     for method in report["method_order"]:

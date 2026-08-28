@@ -4,6 +4,7 @@ schema_version: 1
 # defaults documented in configs/policy/embodisteer.yaml.
 policy:
   inference_space: ee
+  num_inference_steps: 16
   guidance:
     method: ""
   baseline:
