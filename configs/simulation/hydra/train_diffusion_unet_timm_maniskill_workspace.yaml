@@ -177,7 +177,7 @@ training:
   tqdm_interval_sec: 1.0
 
 logging:
-  project: umi
+  project: embodisteer
   resume: False
   mode: online
   name: ${now:%Y.%m.%d-%H.%M.%S}_${name}_${task_name}

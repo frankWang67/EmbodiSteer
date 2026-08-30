@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from scripts.diagnostics.check_release_layout import check_public_strings
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -26,3 +28,23 @@ def test_release_tree_is_self_contained_at_top_level():
     )
     missing = [name for name in required if not (ROOT / name).exists()]
     assert not missing, f"missing release paths: {missing}"
+
+
+def test_public_string_scan_ignores_local_runtime_artifacts(tmp_path):
+    local_metadata = tmp_path / "data_local" / "run" / ".hydra" / "hydra.yaml"
+    local_metadata.parent.mkdir(parents=True)
+    author_local_path = "/" + "data" + "/" + "wshf/private-run"
+    local_metadata.write_text(f"cwd: {author_local_path}\n", encoding="utf-8")
+
+    assert check_public_strings(tmp_path) == []
+
+
+def test_public_string_scan_still_checks_release_files(tmp_path):
+    public_document = tmp_path / "docs" / "installation.md"
+    public_document.parent.mkdir(parents=True)
+    author_local_path = "/" + "data" + "/" + "wshf/private-run"
+    public_document.write_text(f"cwd: {author_local_path}\n", encoding="utf-8")
+
+    assert check_public_strings(tmp_path) == [
+        "docs/installation.md:1: author-local path"
+    ]

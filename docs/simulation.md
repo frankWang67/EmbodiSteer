@@ -36,3 +36,27 @@ listed by `python eval_sim_single_robot.py --help` and
 The ManiSkill training config lives at `configs/simulation/hydra/`. The
 collection/training launcher passes that path explicitly, while shared
 Diffusion Policy training configs remain under `diffusion_policy/config/`.
+
+## End-to-end workflow
+
+Data generation, conversion, training and simulation evaluation are exposed as
+independent stages of one config-driven launcher:
+
+```console
+python scripts_maniskill/run_sim_workflow.py \
+  --config configs/workflows/simulation.yaml --stage all --dry-run
+```
+
+Remove `--dry-run` to execute the stages in order. The default workflow uses
+the pinned ManiSkill checkout, writes raw demos and the converted `*.zarr.zip`
+dataset under ignored `data/` paths, trains into ignored `data/outputs/`, and
+evaluates the resulting `checkpoints/latest.ckpt`. Run a single stage with
+`--stage collect|convert|validate|train|eval` when resuming after an
+interruption. Edit the YAML to choose the task, collection count, GPU,
+training overrides, policy profiles and robot list; the checked-in workflow
+evaluates both the EE baseline and EmbodiSteer. Do not put datasets or
+checkpoints under tracked source directories.
+
+The `validate` stage checks the converter's raw 7D action representation
+(position, axis-angle, gripper), which `UmiDataset` deterministically lifts to
+the 10D position/rotation-6D/gripper training representation.

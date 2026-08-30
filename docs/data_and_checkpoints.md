@@ -12,8 +12,12 @@ access-controlled location and pass their paths explicitly:
 
 - simulation: `eval_sim_single_robot.py --input ... --ckpt_filename ... --policy-config ...`
 - physical deployment: `eval_real.py --input ... --output ...`
-- data conversion/training: keep `DATA_ROOT` outside this tree and use the
-  scripts under `scripts_maniskill/` after the ManiSkill fork is installed.
+- data generation/conversion/training: edit
+  [`configs/workflows/simulation.yaml`](../configs/workflows/simulation.yaml)
+  and run `python scripts_maniskill/run_sim_workflow.py --stage all`; use
+  `--stage collect`, `convert`, `validate`, or `train` to resume individual
+  stages. Keep generated data and checkpoints under the ignored `data/` and
+  `data/outputs/` paths (or configure equivalent external paths).
 
 Do not commit credentials, private robot addresses, raw recordings or derived
 checkpoints. The root `.gitignore` excludes common output directories, but a

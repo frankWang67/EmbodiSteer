@@ -1,0 +1,61 @@
+schema_version: 1
+
+# One explicit, config-driven simulation workflow:
+# collection -> HDF5/UMI conversion -> Diffusion Policy training -> evaluation.
+# Data, checkpoints and run outputs are intentionally outside the tracked source
+# tree (the default paths below are ignored by .gitignore).
+task:
+  name: PickPlaceToasterToCounter
+  env_id: PickPlaceToasterToCounter-v1
+  env_name: PickPlaceToasterToCounter
+
+paths:
+  # The bootstrap script materializes the pinned ManiSkill checkout here.
+  maniskill_root: third_party/src/maniskill
+  data_root: data
+  h5_filename: merged_data_local.h5
+  dataset_filename: ManiSkill_PickPlaceToasterToCounter_local.zarr.zip
+  train_output_dir: data/outputs/pickplace_local
+
+collection:
+  # multi_robot_data_collection.py collects this total across its five robots;
+  # it must be divisible by five.
+  total_trajectories: 100
+  obs_mode: rgb
+  control_mode: pd_ee_pose
+  sim_backend_gen: physx_cpu
+  sim_backend_replay: physx_cpu
+  num_procs: 1
+  save_video: false
+  gpu_index: 0
+
+conversion:
+  camera_name: hand_camera
+  image_size: 224
+
+training:
+  config_dir: configs/simulation/hydra
+  config_name: train_diffusion_unet_timm_maniskill_workspace
+  device: cuda:0
+  gpu_index: 0
+  logging_mode: offline
+  overrides:
+    training.num_epochs: 120
+    training.resume: false
+
+evaluation:
+  gpu_index: 0
+  profiles:
+    ee: configs/policy/ee.yaml
+    embodisteer: configs/policy/embodisteer.yaml
+  robots:
+    - panda_robotiq_wristcam
+  sim_backend: physx_cpu
+  num_env: 1
+  num_eval_episodes: 1
+  env_seed: 2022
+  obs_mode: rgb
+  render_mode: rgb_array
+  steps_per_inference: 8
+  max_episode_steps: 500
+  obstacle: true

@@ -10,6 +10,7 @@ from argparse import ArgumentParser
 from datetime import datetime
 
 from embodisteer.runtime_config import PolicyConfigError, load_policy_config
+from embodisteer.evaluation import evaluation_subdir
 
 SCRIPT_PATH = os.path.join(os.path.dirname(__file__), "eval_sim_single_robot.py")
 
@@ -185,31 +186,14 @@ def build_command(task):
 
 def get_results_path(task):
     """Replicate the log dir logic from eval_sim_single_robot.py."""
-    if args.baseline_method:
-        subdir = f"obstacle_baseline_{args.baseline_method}"
-    elif args.inference_space == "joint":
-        if args.guidance:
-            if args.guidance_cbf_reverse_task_threshold is not None:
-                threshold = f"{args.guidance_cbf_reverse_task_threshold:.8g}"
-                subdir = (
-                    "obstacle_joint_space_guidance_reverse_cbf_"
-                    f"task_threshold_{threshold}"
-                )
-            else:
-                subdir = "obstacle_joint_space_guidance"
-        else:
-            subdir = "obstacle_joint_space" if args.obstacle else "no_obstacle_joint_space"
-    else:
-        if args.guidance:
-            subdir = "obstacle_ee_space_guidance"
-        else:
-            subdir = "obstacle_ee_space" if args.obstacle else "no_obstacle_ee_space"
-    if args.obstacle_observation_noise is not None:
-        pos_std, size_std, rot_std = args.obstacle_observation_noise
-        noise_subdir = (
-            f"obs_noise_pos{pos_std:.6g}_size{size_std:.6g}_rot{rot_std:.6g}"
-        )
-        subdir = os.path.join(subdir, noise_subdir)
+    subdir = evaluation_subdir(
+        inference_space=args.inference_space,
+        guidance=args.guidance,
+        baseline_method=args.baseline_method,
+        reverse_cbf_task_threshold=args.guidance_cbf_reverse_task_threshold,
+        obstacle=args.obstacle,
+        obstacle_observation_noise=args.obstacle_observation_noise,
+    )
     return os.path.join(args.input, "eval_results", task["robot_uid"], subdir, "eval_results.txt")
 
 

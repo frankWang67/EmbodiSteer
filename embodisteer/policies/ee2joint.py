@@ -44,7 +44,6 @@ from embodisteer.kinematics import (
     inv_se3,
     pose9d_to_mat,
     relative_pose9_to_absolute,
-    twist6_from_matrices,
 )
 from embodisteer.guidance import (
     guidance_scale_at,
@@ -589,9 +588,16 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
         self, abs_pos_curr: torch.Tensor, abs_rot_curr: torch.Tensor,
         abs_pos_tgt: torch.Tensor, abs_rot_tgt: torch.Tensor,
     ) -> torch.Tensor:
-        return twist6_from_matrices(
-            abs_pos_curr, abs_rot_curr, abs_pos_tgt, abs_rot_tgt
+        bsz, horizon = abs_pos_curr.shape[:2]
+        pos_cur = abs_pos_curr.reshape(-1, 3)
+        rot_cur = abs_rot_curr.reshape(-1, 3, 3)
+        pos_tgt = abs_pos_tgt.reshape(-1, 3)
+        rot_tgt = abs_rot_tgt.reshape(-1, 3, 3)
+        dpos = pos_tgt - pos_cur
+        drot = self._matrix_to_axis_angle_fast(
+            rot_tgt @ rot_cur.transpose(-2, -1)
         )
+        return torch.cat([dpos, drot], dim=-1).reshape(bsz, horizon, 6)
 
     def _absolute_pose_delta_to_twist6(
         self, abs_pose9_curr: torch.Tensor, abs_pose9_tgt: torch.Tensor,

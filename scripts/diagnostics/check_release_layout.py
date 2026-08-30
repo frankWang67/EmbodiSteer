@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -88,6 +89,10 @@ FORBIDDEN_PROJECT_FILES_IN_UMI = (
 )
 
 TEXT_SUFFIXES = {".cff", ".md", ".py", ".sh", ".toml", ".txt", ".yaml", ".yml"}
+# Fallback exclusions for source trees or temporary test roots without Git
+# metadata. In a checkout, ``git ls-files --exclude-standard`` handles these
+# patterns directly from ``.gitignore``.
+LOCAL_ARTIFACT_DIRS = {"data", "data_local", "outputs", "wandb", "pretrained"}
 PUBLIC_STRING_PATTERNS = {
     "private IPv4 address": re.compile(
         r"(?<![0-9.])(?:10\.(?:\d{1,3}\.){2}\d{1,3}|"
@@ -100,6 +105,43 @@ PUBLIC_STRING_PATTERNS = {
 }
 
 
+def _candidate_text_paths(root: Path):
+    """Yield release candidates, honoring Git ignores when available."""
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(root),
+                "ls-files",
+                "--cached",
+                "--others",
+                "--exclude-standard",
+                "-z",
+            ],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
+    except OSError:
+        result = None
+
+    if result is not None and result.returncode == 0:
+        relative_paths = result.stdout.decode("utf-8", errors="surrogateescape").split("\0")
+        for relative in relative_paths:
+            if relative:
+                path = root / relative
+                if path.is_file() and path.suffix.lower() in TEXT_SUFFIXES:
+                    yield path
+        return
+
+    # Source archives do not necessarily contain .git metadata. In that case,
+    # retain the conservative filesystem scan and its explicit exclusions.
+    for path in root.rglob("*"):
+        if path.is_file() and path.suffix.lower() in TEXT_SUFFIXES:
+            yield path
+
+
 def check_public_strings(root: Path) -> list[str]:
     """Reject site-specific addresses and author-local paths in release text."""
     errors: list[str] = []
@@ -110,11 +152,11 @@ def check_public_strings(root: Path) -> list[str]:
         ".pytest_cache",
         "__pycache__",
     }
-    for path in root.rglob("*"):
-        if not path.is_file() or path.suffix.lower() not in TEXT_SUFFIXES:
-            continue
+    for path in _candidate_text_paths(root):
         relative_path = path.relative_to(root)
         if ignored_parts.intersection(relative_path.parts):
+            continue
+        if relative_path.parts and relative_path.parts[0] in LOCAL_ARTIFACT_DIRS:
             continue
         # The pinned forks are external dependencies materialized into this
         # gitignored directory. Their upstream examples are not release text

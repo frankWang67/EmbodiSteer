@@ -68,14 +68,16 @@ shape_meta: &shape_meta
     down_sample_steps: ${task.obs_down_sample_steps} # int
     rotation_rep: rotation_6d
 
-task_name: &task_name umi
+task_name: &task_name maniskill
 dataset_path: example_demo_session/dataset.zarr.zip
 pose_repr: &pose_repr
   obs_pose_repr: relative # abs or rel
   action_pose_repr: relative # abs or rel or delta
 
 env_runner:
-  _target_: diffusion_policy.env_runner.real_pusht_image_runner.RealPushTImageRunner
+  # Training-time rollout is intentionally disabled. The workflow evaluates
+  # saved checkpoints in ManiSkill as a separate, reproducible stage.
+  _target_: embodisteer.training.NoOpImageRunner
 
 dataset:
   _target_: diffusion_policy.dataset.umi_dataset.UmiDataset

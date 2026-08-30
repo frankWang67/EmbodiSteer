@@ -27,6 +27,7 @@ EmbodiSteer/
 ├── eval_sim_single_robot.py  # single-robot simulation evaluation
 ├── eval_sim_multi_robots.py  # multi-robot simulation evaluation
 ├── scripts_maniskill/        # simulation helpers and diagnostics
+├── configs/workflows/        # config-driven data/train/evaluation workflow
 ├── scripts_real/             # real-device boundary and safety notes
 ├── scripts_slam_pipeline/    # data/SLAM preparation utilities
 ├── eval_real.py              # real-world evaluation entry point
@@ -76,10 +77,10 @@ available under `embodisteer.policies.legacy` when required.
 4. Materialize the pinned dependencies with the bootstrap script. The script
    never runs implicitly.
 
-The current phase does not publish or require project checkpoint and training
-data artifacts. The empty artifact inventory is intentional rather than a
-missing download link. Complete paper-table reproduction will be documented
-only after their release location is decided.
+The repository does not publish or require project checkpoint and training
+data artifacts for installation. The empty artifact inventory is intentional
+rather than a missing download link. Complete paper-table reproduction will be
+documented only after their release location is decided.
 
 ## Simulation entry points
 
@@ -98,8 +99,20 @@ python eval_real.py --help
 Checkpoint, environment, robot and output paths remain command-line arguments;
 inference space, guidance/CBF/SDF, IK, baseline and JM2D settings belong in the
 policy YAML, including the Cartesian GD collision geometry and schedule. See
-[`docs/policy_configuration.md`](docs/policy_configuration.md). Run simulation only after installing the pinned ManiSkill fork
-and providing a compatible checkpoint.
+[`docs/policy_configuration.md`](docs/policy_configuration.md). Run simulation
+only after installing the pinned ManiSkill fork and providing a compatible
+checkpoint.
+
+For a newly trained checkpoint, preview the complete simulation pipeline with:
+
+```console
+python scripts_maniskill/run_sim_workflow.py \
+  --config configs/workflows/simulation.yaml --stage all --dry-run
+```
+
+The workflow separates collection, conversion, dataset validation, training
+and evaluation into resumable stages. Generated data, checkpoints and results
+remain in gitignored or explicitly configured external locations.
 
 ## Real-world code
 

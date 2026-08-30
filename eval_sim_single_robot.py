@@ -29,6 +29,7 @@ from embodisteer.runtime_config import (
     joint_policy_overrides,
     load_policy_config,
 )
+from embodisteer.evaluation import evaluation_subdir
 from diffusion_policy.common.pytorch_util import dict_apply
 from diffusion_policy.workspace.base_workspace import BaseWorkspace
 from umi.real_world.real_inference_util import (
@@ -74,6 +75,7 @@ def _infer_robot_kinematic_args(robot_cfg_name: str):
         arm_dof = None
 
     return robot_urdf_path, ee_link_name, arm_dof
+
 
 @click.command()
 @click.option('--input', '-i', required=True, help='Path to checkpoint and experiment results')
@@ -229,9 +231,13 @@ def main(
                 cfg.policy[key] = value
             cfg.policy.baseline_method = baseline_method
             cfg.policy.batch_sampling_num = batch_sampling_num
-            cfg.policy.jm2d_num_samples = jm2d_num_samples
-            cfg.policy.jm2d_temperature = jm2d_temperature
-            cfg.policy.jm2d_eta = jm2d_eta
+            # JM2D-specific constructor arguments are only injected for the
+            # JM2D target.  Keeping them out of the other baseline configs
+            # avoids leaking unrelated fields through ``**kwargs``.
+            if baseline_method == 'jm2d':
+                cfg.policy.jm2d_num_samples = jm2d_num_samples
+                cfg.policy.jm2d_temperature = jm2d_temperature
+                cfg.policy.jm2d_eta = jm2d_eta
             cfg.policy.robot_uid = robot_uids
             cfg.policy.robot_cfg_name = robot_cfg_name
             if robot_urdf_path is not None:
@@ -280,33 +286,16 @@ def main(
     print("dataset_path:", cfg.task.dataset.dataset_path)
 
     # ── Compute subdir name (shared by video_dir and log_dir) ───────────
-    def _eval_subdir():
-        if use_baseline:
-            subdir = f'obstacle_baseline_{baseline_method}'
-        elif inference_space == 'joint':
-            if use_guidance:
-                if use_reverse_cbf:
-                    threshold = f'{guidance_cbf_reverse_task_threshold:.8g}'
-                    subdir = (
-                        'obstacle_joint_space_guidance_reverse_cbf_'
-                        f'task_threshold_{threshold}'
-                    )
-                else:
-                    subdir = 'obstacle_joint_space_guidance'
-            else:
-                subdir = 'obstacle_joint_space' if obstacle else 'no_obstacle_joint_space'
-        elif use_guidance:
-            subdir = 'obstacle_ee_space_guidance'
-        else:
-            subdir = 'obstacle_ee_space' if obstacle else 'no_obstacle_ee_space'
-        if obstacle_noise_enabled:
-            pos_std, size_std, rot_std = obstacle_observation_noise
-            noise_subdir = (
-                f'obs_noise_pos{pos_std:.6g}_size{size_std:.6g}_rot{rot_std:.6g}'
-            )
-            subdir = os.path.join(subdir, noise_subdir)
-        return subdir
-    eval_subdir = _eval_subdir()
+    eval_subdir = evaluation_subdir(
+        inference_space=inference_space,
+        guidance=guidance,
+        baseline_method=baseline_method,
+        reverse_cbf_task_threshold=guidance_cbf_reverse_task_threshold,
+        obstacle=obstacle,
+        obstacle_observation_noise=(
+            obstacle_observation_noise if obstacle_noise_enabled else None
+        ),
+    )
 
     video_dir = os.path.join(exp_path, 'eval_results', robot_uids, eval_subdir, 'videos')
     os.makedirs(video_dir, exist_ok=True)

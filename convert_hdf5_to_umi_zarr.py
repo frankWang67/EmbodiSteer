@@ -49,6 +49,8 @@ def resize_image(image, target_size=224):
 
 def convert_dataset(input_h5_path, output_path, camera_name='hand_camera', image_size=224):
     """Convert HDF5 dataset to UMI zarr format."""
+    input_h5_path = os.fspath(input_h5_path)
+    output_path = os.fspath(output_path)
     assert os.path.exists(input_h5_path), f"Input path {input_h5_path} does not exist."
     assert input_h5_path.endswith('.h5') or input_h5_path.endswith('.hdf5'), "Input path must be an HDF5 file."
     
@@ -224,4 +226,4 @@ def main():
     )
 
 if __name__ == '__main__':
-    main() 
+    main()
