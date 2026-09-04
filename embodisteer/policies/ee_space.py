@@ -25,7 +25,7 @@ class DiffusionUnetTimmPolicyEESpace(BaseImagePolicy):
 
     When use_ee_guidance=False, behaves identically to the base DiffusionUnetTimmPolicy.
     When use_ee_guidance=True, applies gradient-based guidance using EEF corner points
-    and obstacle information during denoising (same as DiffusionUnetTimmPolicyWithGuidance).
+    and obstacle information during denoising.
     """
 
     eef_corner_pts = torch.tensor([

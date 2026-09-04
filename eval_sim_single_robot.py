@@ -287,8 +287,8 @@ def main(
         with open_dict(cfg.policy):
             for key, value in ee_policy_overrides(policy_settings).items():
                 cfg.policy[key] = value
-    # Ensure every target (including legacy checkpoint configs) receives the
-    # canonical inference step count from the selected policy profile.
+    # Ensure every target (including checkpoints with older stored configs)
+    # receives the canonical inference step count from the selected profile.
     with open_dict(cfg.policy):
         cfg.policy.num_inference_steps = policy_settings['num_inference_steps']
     print("policy_config:", policy_settings['config_path'])

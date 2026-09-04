@@ -89,6 +89,13 @@ FORBIDDEN_PROJECT_FILES_IN_UMI = (
     "diffusion_policy/policy/diffusion_unet_timm_policy_with_guidance.py",
 )
 
+RETIRED_POLICY_FILES = (
+    "embodisteer/policies/legacy.py",
+    "embodisteer/policies/legacy_ee_guidance.py",
+    "embodisteer/policies/legacy_joint_space.py",
+    "embodisteer/policies/legacy_joint_space_guidance.py",
+)
+
 TEXT_SUFFIXES = {".cff", ".md", ".py", ".sh", ".toml", ".txt", ".yaml", ".yml"}
 # Fallback exclusions for source trees or temporary test roots without Git
 # metadata. In a checkout, ``git ls-files --exclude-standard`` handles these
@@ -279,6 +286,11 @@ def check_layout(root: Path) -> list[str]:
         for name in FORBIDDEN_PROJECT_FILES_IN_UMI
         if (root / name).exists()
     )
+    errors.extend(
+        f"retired policy implementation must not be restored: {name}"
+        for name in RETIRED_POLICY_FILES
+        if (root / name).exists()
+    )
     manifest, manifest_errors = load_yaml_mapping(third_party_manifest_path())
     errors.extend(manifest_errors)
     if manifest:
@@ -305,7 +317,6 @@ def main() -> None:
         importlib.import_module("embodisteer.policies.ee_space")
         importlib.import_module("embodisteer.policies.baselines")
         importlib.import_module("embodisteer.policies.jm2d")
-        importlib.import_module("embodisteer.policies.legacy")
     if errors:
         raise SystemExit("\n".join(errors))
     print(f"EmbodiSteer layout OK: {root}")

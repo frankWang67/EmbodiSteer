@@ -19,6 +19,14 @@ access-controlled location and pass their paths explicitly:
   stages. Keep generated data and checkpoints under the ignored `data/` and
   `data/outputs/` paths (or configure equivalent external paths).
 
+The standard checkpoint format stores the Diffusion Policy workspace
+configuration plus model state dictionaries. The evaluation launchers
+replace the stored policy target with the stable public target selected by the
+policy YAML before constructing the workspace. Serialized research snapshots
+and paper-era legacy policy targets are outside the supported release
+boundary; recover the historical source from Git if those diagnostics are
+needed.
+
 Do not commit credentials, private robot addresses, raw recordings or derived
 checkpoints. The root `.gitignore` excludes common output directories, but a
 release review must still inspect any new artifact before publishing.

@@ -5,6 +5,10 @@ pre-publication phase, so no versioned release has been tagged yet.
 
 ## Unreleased
 
+- Removed the retired policy implementation tree. Checkpoint interoperability
+  is provided by loading Diffusion Policy weights into the stable public
+  policy selected by the evaluation profile, rather than by preserving
+  experimental inference classes.
 - Removed inactive experimental inference branches and their configuration
   fields, leaving the paper's Jacobian-projected initialization, geometric
   residual update, and one guidance correction per denoising step as the

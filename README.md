@@ -60,10 +60,11 @@ from embodisteer.policies import EmbodiSteerJointPolicy
 from embodisteer.policies import EmbodiSteerEESpacePolicy
 ```
 
-Existing Diffusion Policy checkpoint targets continue to resolve through the
-`diffusion_policy.policy` namespace. EmbodiSteer checkpoints/configurations
-should target `embodisteer.policies`; checkpoint-compatibility classes are
-available under `embodisteer.policies.legacy` when required.
+Checkpoints trained with the bundled Diffusion Policy model remain
+interoperable: the evaluation launchers load their stored configuration and
+weights, then select the stable public EmbodiSteer policy target requested by
+the policy YAML before constructing the workspace. New EmbodiSteer
+checkpoints/configurations should target `embodisteer.policies`.
 
 ## Installation boundary
 

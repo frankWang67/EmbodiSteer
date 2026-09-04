@@ -233,20 +233,9 @@ def rel_action_obstacle_loss(
         
     return total_loss
 
-def get_guidance_strength(k, num_diffusion_steps):
-    h1 = 1.0
-    h2 = 50.0
-    h3 = 0.7
-    
-    t = k / num_diffusion_steps
-    gamma = h1 / (1 + torch.exp(-h2 * (h3 - t)))
-
-    return gamma
-
 
 __all__ = [
     "flatten_obstacle_info",
-    "get_guidance_strength",
     "get_pred_x0",
     "rel_action_obstacle_loss",
 ]

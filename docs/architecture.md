@@ -28,5 +28,11 @@ namespaced under `embodisteer.kinematics` and `embodisteer.guidance`.
 Only ManiSkill and cuRobo are external repositories. Their exact URLs and
 commits are recorded in `third_party/manifest.yaml`.
 
+Checkpoint interoperability covers the standard Diffusion Policy payload
+format: launchers reuse its workspace and state dictionaries while selecting
+an explicit public EmbodiSteer policy target from the policy YAML. Serialized
+research snapshots and retired paper-era policy classes are not part of the
+release compatibility contract.
+
 For the algorithmic loop, sign conventions and comparison methods, see
 [`method.md`](method.md).

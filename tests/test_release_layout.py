@@ -1,6 +1,9 @@
 from pathlib import Path
 
-from scripts.diagnostics.check_release_layout import check_public_strings
+from scripts.diagnostics.check_release_layout import (
+    RETIRED_POLICY_FILES,
+    check_public_strings,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -30,6 +33,11 @@ def test_release_tree_is_self_contained_at_top_level():
     )
     missing = [name for name in required if not (ROOT / name).exists()]
     assert not missing, f"missing release paths: {missing}"
+
+
+def test_retired_policy_implementations_are_absent():
+    restored = [name for name in RETIRED_POLICY_FILES if (ROOT / name).exists()]
+    assert not restored, f"retired policy paths were restored: {restored}"
 
 
 def test_public_string_scan_ignores_local_runtime_artifacts(tmp_path):

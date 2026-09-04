@@ -103,9 +103,7 @@ The release keeps the following comparison paths under `embodisteer/policies`:
   selects the safest candidate by whole-body distance;
 - JM2D conditional generation, which importance-weights clean Cartesian
   candidates using joint-realized collision energy and applies a final
-  one-shot CBF correction; and
-- compatibility policies retained for existing checkpoints and controlled
-  comparisons.
+  one-shot CBF correction.
 
 ## Package and deployment boundary
 
