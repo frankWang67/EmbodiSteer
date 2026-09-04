@@ -16,7 +16,8 @@ After the pinned dependency checkouts are materialized:
 1. install and record the exact three-repository revisions;
 2. run a CPU/layout smoke test, then a small GPU evaluation;
 3. generate demos, convert them to UMI zarr, train a checkpoint, then run the
-   EE baseline and EmbodiSteer variants with fixed seeds;
+   EE baseline and EmbodiSteer variants using the paper's unseeded environment
+   reset protocol;
 4. collect collision and success metrics using the manifest semantics;
 5. validate the physical `--dry_run` and then a reviewed low-speed hardware
    trial; and

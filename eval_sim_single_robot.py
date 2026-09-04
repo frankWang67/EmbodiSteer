@@ -99,7 +99,6 @@ def _infer_robot_kinematic_args(robot_cfg_name: str):
 @click.option('--control_mode', '-c', default=None, help='ManiSkill control mode; inferred from the policy config when omitted.')
 @click.option('--num_env', '-n', default=10, type=int, help='Number of parallel environments')
 @click.option('--num_eval_episodes', '-ne', default=100, type=int, help='Number of evaluation episodes')
-@click.option('--env_seed', '--env-seed', default=2022, type=int, help='Compatibility metadata; the paper protocol keeps env.reset() unseeded.')
 @click.option('--obs_mode', '-o', default='rgb', help='Observation mode for ManiSkill env')
 @click.option('--render_mode', '-rm', default='all', help='Render mode for ManiSkill env')
 @click.option('--steps_per_inference', '-si', default=0, type=int, help="Number of predicted actions to execute per policy call. Use 0 to execute cfg.task.action_horizon.")
@@ -135,7 +134,6 @@ def main(
     control_mode,
     num_env,
     num_eval_episodes,
-    env_seed,
     obs_mode,
     render_mode,
     steps_per_inference,
@@ -382,8 +380,6 @@ def main(
     policy.eval().to(device)
 
     print("Warming up policy inference")
-    env_seeds = [env_seed + i for i in range(num_env)]
-    # obs, info = env.reset(seed=env_seeds)
     obs, info = env.reset()
     # 获取当前关节角度（在转换obs之前）
     current_joint_angles_warmup = torch.tensor(obs["joint_state"][:, -1, :]).to(device) if is_joint_space else None
@@ -428,7 +424,6 @@ def main(
         is_joint_space,          # joint_space param: triggers chunk_pose
         device,
         control_mode=control_mode,
-        env_seed=env_seed,
     )
     jm2d_ik_pose_success_rate = None
     jm2d_ik_trajectory_success_rate = None
@@ -507,7 +502,6 @@ def main(
     os.makedirs(os.path.dirname(log_filename), exist_ok=True)
     with open(log_filename, "w") as f:
         f.write("reset_protocol: unseeded_env_reset\n")
-        f.write(f"env_seed_argument: {env_seed}\n")
         if obstacle_noise_enabled:
             pos_std, size_std, rot_std = obstacle_observation_noise
             f.write(f"obstacle_position_noise_std_m: {pos_std}\n")
@@ -614,7 +608,6 @@ def main(
             'num_env': num_env,
             'num_eval_episodes': num_eval_episodes,
             'reset_protocol': 'unseeded_env_reset',
-            'env_seed_argument': env_seed,
             'obs_mode': obs_mode,
             'render_mode': render_mode,
             'steps_per_inference': steps_per_inference,

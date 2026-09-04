@@ -121,10 +121,6 @@ class DiffusionUnetTimmPolicyBaseline(DiffusionUnetTimmPolicyJointSpace):
         q_seed = q_start.unsqueeze(1).expand(bsz, horizon, self._robot_dof)
         q_arm = self._ik_from_absolute(abs_pos, abs_rot, q_seed)
 
-        # === DEBUG: snapshot before CBF correction ===
-        q_arm_before = q_arm.detach().clone()
-        abs_pos_before, abs_rot_before = self._fk_to_absolute(q_arm_before)
-
         # Apply CBF-QP correction if collision world exists
         if self._world_collision is not None:
             cond_step_mask = condition_mask.any(dim=-1)
@@ -148,32 +144,6 @@ class DiffusionUnetTimmPolicyBaseline(DiffusionUnetTimmPolicyJointSpace):
         # FK back to EE space for normalized output
         abs_p_f, abs_r_f = self._fk_to_absolute(q_arm)
 
-        # # === DEBUG: print before/after diff (sample 0) ===
-        # with torch.no_grad():
-        #     dq_total = (q_arm - q_arm_before).detach()
-        #     d_pos = (abs_p_f - abs_pos_before).detach()
-        #     ee_pos_target = abs_pos.detach()
-        #     ee_pos_pre_cbf = abs_pos_before.detach()
-        #     ee_pos_post_cbf = abs_p_f.detach()
-        #     target_vs_pre = (ee_pos_pre_cbf - ee_pos_target).norm(dim=-1)
-        #     target_vs_post = (ee_pos_post_cbf - ee_pos_target).norm(dim=-1)
-        #     joint_step_diff_pre = (q_arm_before[:, 1:] - q_arm_before[:, :-1]).abs().max(dim=-1).values
-        #     joint_step_diff_post = (q_arm[:, 1:] - q_arm[:, :-1]).abs().max(dim=-1).values
-        #     print(f"[post_hoc_cbf DEBUG] bsz={bsz} horizon={horizon}")
-        #     print(f"  ||IK_ee - target_ee||  per-step (sample0): {target_vs_pre[0].cpu().numpy()}")
-        #     print(f"  ||CBF_ee - target_ee|| per-step (sample0): {target_vs_post[0].cpu().numpy()}")
-        #     print(f"  CBF dq L2 per-step (sample0):              {dq_total[0].norm(dim=-1).cpu().numpy()}")
-        #     print(f"  CBF d_ee_pos L2 per-step (sample0):         {d_pos[0].norm(dim=-1).cpu().numpy()}")
-        #     ee_step_diff = (abs_pos[:, 1:] - abs_pos[:, :-1]).norm(dim=-1)
-        #     ee_rot_step_diff = ((abs_rot[:, 1:].transpose(-2, -1) @ abs_rot[:, :-1]).diagonal(dim1=-2, dim2=-1).sum(-1) - 1).clamp(-2, 2).mul(0.5).acos()
-        #     print(f"  target ee_pos step diff (sample0):         {ee_step_diff[0].cpu().numpy()}")
-        #     print(f"  target ee_rot step diff [rad] (sample0):   {ee_rot_step_diff[0].cpu().numpy()}")
-        #     print(f"  max joint-step jump pre-CBF (sample0):     {joint_step_diff_pre[0].cpu().numpy()}")
-        #     print(f"  max joint-step jump post-CBF (sample0):    {joint_step_diff_post[0].cpu().numpy()}")
-        #     print(f"  q_arm_before[0,0] = {q_arm_before[0,0].cpu().numpy()}")
-        #     print(f"  q_arm_after [0,0] = {q_arm[0,0].cpu().numpy()}")
-        #     print(f"  q_arm_before[0,-1]= {q_arm_before[0,-1].cpu().numpy()}")
-        #     print(f"  q_arm_after [0,-1]= {q_arm[0,-1].cpu().numpy()}")
         rel_pos_f = (base_rot_t.unsqueeze(1) @ (abs_p_f - base_pos.unsqueeze(1)).unsqueeze(-1)).squeeze(-1)
         rel_rot_f = base_rot_t.unsqueeze(1) @ abs_r_f
         rel_rot6d_f = matrix_to_rot6d(rel_rot_f.reshape(-1, 3, 3)).reshape(bsz, horizon, 6)
@@ -293,7 +263,6 @@ class DiffusionUnetTimmPolicyBaseline(DiffusionUnetTimmPolicyJointSpace):
     def predict_action(
         self,
         obs_dict: Dict[str, torch.Tensor],
-        fixed_action_prefix: torch.Tensor = None,
         env_batched=False,
         chunk_start_pose: torch.Tensor = None,
         obstacle_info=None,
@@ -320,12 +289,6 @@ class DiffusionUnetTimmPolicyBaseline(DiffusionUnetTimmPolicyJointSpace):
                 device=self.device, dtype=self.dtype,
             )
         cond_mask = torch.zeros_like(cond_data, dtype=torch.bool)
-
-        if fixed_action_prefix is not None and self.inpaint_fixed_action_prefix:
-            n_fixed_steps = fixed_action_prefix.shape[1]
-            cond_data[:, :n_fixed_steps] = fixed_action_prefix
-            cond_mask[:, :n_fixed_steps] = True
-            cond_data = self.normalizer["action"].normalize(cond_data)
 
         if chunk_start_pose is None:
             raise ValueError("chunk_start_pose must be provided for baseline policy inference.")

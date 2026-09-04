@@ -338,7 +338,6 @@ def evaluate(
     joint_space,
     device,
     control_mode: str = "pd_ee_pose",
-    env_seed: int = 2022,
     progress_bar: bool = True,
 ):
     assert steps_per_inference >= 1 and steps_per_inference <= cfg.task.action_horizon, \
@@ -350,8 +349,6 @@ def evaluate(
         pbar = tqdm(total=n)
     with torch.no_grad():
         eval_metrics = defaultdict(list)
-        env_seeds = [env_seed + i for i in range(eval_envs.num_envs)]
-        # obs, info = eval_envs.reset(seed=env_seeds)
         obs, info = eval_envs.reset()
         eps_count = 0
         inference_call_count = 0

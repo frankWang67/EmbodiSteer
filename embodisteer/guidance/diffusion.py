@@ -23,9 +23,7 @@ def quat_apply(quat, vec):
     # 如果你的模型输出是 [x, y, z, w]，请在此处调整切片
     w, x, y, z = quat.unbind(dim=-1)
     
-    # 临时变量辅助计算
-    two_s = 2.0 / (quat * quat).sum(dim=-1) # normalization factor if not normalized
-    two_s = 2.0 # 假设输出已归一化，通常直接取2
+    two_s = 2.0  # Inputs are normalized quaternions.
     
     # 简化的旋转逻辑 (PyTorch 官方常用写法)
     uv = torch.cross(quat[..., 1:], vec, dim=-1)
@@ -56,18 +54,6 @@ def rot6d_to_matrix(rot6d):
     
     return rot_mat
 
-def matrix_to_rot6d(rot_mat):
-    """
-    将旋转矩阵转换回 6D 表示
-    rot_mat: (..., 3, 3)
-    输出: (..., 6) 前3维是 x_axis，后3维是 y_axis 的未归一化向量
-    """
-    x_axis = rot_mat[..., 0, :] # (..., 3)
-    y_axis = rot_mat[..., 1, :] # (..., 3)
-    
-    rot6d = torch.cat([x_axis, y_axis], dim=-1) # (..., 6)
-    return rot6d
-
 def pose9d_to_mat(pose9d):
     """
     将 9D pose (pos + 6d rot) 转换为 4x4 变换矩阵
@@ -85,18 +71,6 @@ def pose9d_to_mat(pose9d):
     mat[:, :3, 3] = pos
     
     return mat
-
-def mat_to_pose9d(mat):
-    """
-    将 4x4 变换矩阵转换回 9D pose (pos + 6d rot)
-    """
-    pos = mat[:, :3, 3] # (B, 4, 4) -> (B, 3)
-    rot_mat = mat[:, :3, :3] # (B, 4, 4) -> (B, 3, 3)
-    
-    rot6d = matrix_to_rot6d(rot_mat) # (B, 3, 3) -> (B, 6)
-    
-    pose9d = torch.cat([pos, rot6d], dim=-1) # (B, 9)
-    return pose9d
 
 def point_obb_distance(points, box_center, box_quat, box_extent):
     """

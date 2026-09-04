@@ -81,12 +81,11 @@ def test_joint_overrides_include_configured_guidance_and_ik_values():
     overrides = joint_policy_overrides(config)
     assert overrides["guidance_method"] == "cbf"
     assert overrides["guidance_use_schedule"] is True
-    assert overrides["guidance_steps_per_denoise"] == 1
     assert overrides["num_inference_steps"] == 16
     assert overrides["guidance_schedule_midpoint"] == 0.7
     assert overrides["guidance_schedule_steepness"] == 50.0
     assert overrides["jacobian_damping"] == 0.001
-    assert overrides["noise_init_mode"] == "jacobian_projected"
+    assert overrides["jac_noise_alpha"] == 0.1
 
 
 def test_ee_overrides_include_all_cartesian_guidance_values():

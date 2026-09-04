@@ -23,8 +23,6 @@ def aggregate_signed_distance(
 ) -> torch.Tensor:
     """Reduce per-sphere ESDF values while preserving penetrations exactly."""
     normalized_mode = str(mode).lower().strip()
-    if normalized_mode == "softmax":
-        normalized_mode = "topk"
     if normalized_mode == "max":
         return distances.max(dim=-1).values
     if normalized_mode != "topk":

@@ -5,6 +5,11 @@ pre-publication phase, so no versioned release has been tagged yet.
 
 ## Unreleased
 
+- Removed inactive experimental inference branches and their configuration
+  fields, leaving the paper's Jacobian-projected initialization, geometric
+  residual update, and one guidance correction per denoising step as the
+  canonical EmbodiSteer path. Evaluation now records the unseeded reset
+  protocol without exposing an ineffective environment-seed argument.
 - Promoted the single- and multi-robot simulation evaluators to root-level
   entry points and moved shared EmbodiSteer algorithm settings from CLI flags
   into versioned policy YAML files used by simulation and real-world runs.

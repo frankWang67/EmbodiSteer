@@ -110,37 +110,32 @@ def test_joint_config_overrides_reach_policy_constructor_without_initializing_ki
     assert policy._kin_model is None
 
 
-def test_cpu_synthetic_ee_predict_action_is_finite_reproducible_and_conditioned():
+def test_cpu_synthetic_ee_predict_action_is_finite_and_reproducible():
     values = deepcopy(DEFAULT_POLICY_CONFIG)
     values.update({"guidance": "", "num_inference_steps": 2})
     args = _base_constructor_args()
     policy = EmbodiSteerEESpacePolicy(
         **args,
         **ee_policy_overrides(values),
-        inpaint_fixed_action_prefix=True,
     )
     policy.model = ZeroNoiseModel()
     _set_identity_normalizer(policy)
     observations = {"state": torch.zeros(1, 1, 2)}
-    prefix = torch.full((1, 2, 10), 0.125)
-
     torch.manual_seed(123)
-    first = policy.predict_action(observations, fixed_action_prefix=prefix)["action"]
+    first = policy.predict_action(observations)["action"]
     torch.manual_seed(123)
-    second = policy.predict_action(observations, fixed_action_prefix=prefix)["action"]
+    second = policy.predict_action(observations)["action"]
 
     assert tuple(first.shape) == (1, 4, 10)
     assert first.device.type == "cpu"
     assert torch.isfinite(first).all()
     torch.testing.assert_close(first, second)
-    torch.testing.assert_close(first[:, :2], prefix)
 
 
 def _make_cpu_joint_policy(guidance):
     values = deepcopy(DEFAULT_POLICY_CONFIG)
     values.update({"inference_space": "joint", "guidance": guidance, "num_inference_steps": 2})
     constructor = joint_policy_overrides(values)
-    constructor.update(init_noise_scale=0.0, noise_init_mode="isotropic")
     policy = EmbodiSteerJointPolicy(
         **_base_constructor_args(),
         robot_cfg_name="unused-in-mock-test.yml",
@@ -209,13 +204,8 @@ def test_cpu_synthetic_joint_predict_action_covers_no_guidance_cbf_and_gd():
             chunk_start_pose=chunk_start_pose,
             current_joint_angles=current_joint_angles,
             obstacle_info=[{"synthetic": True}] if guidance else None,
-            return_debug=True,
         )
 
         assert tuple(result["joint_action_pred"].shape) == (1, 4, 7)
         assert tuple(result["action_pred"].shape) == (1, 4, 10)
         assert torch.isfinite(result["joint_action_pred"]).all()
-        assert "debug" in result
-        assert len(result["debug"]["step_cart_l2"]) == 2
-        if guidance:
-            assert len(result["debug"]["guidance_loss"]) == 2

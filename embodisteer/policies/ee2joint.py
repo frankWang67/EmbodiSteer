@@ -1,6 +1,5 @@
 from typing import Dict, Optional, Tuple, List, Any
 import os
-import time
 
 import torch
 import pytorch_kinematics as pk
@@ -22,7 +21,6 @@ torch._dynamo.config.capture_dynamic_output_shape_ops = True
 
 from embodisteer.guidance.diffusion import (
     flatten_obstacle_info,
-    get_pred_x0,
 )
 
 from embodisteer.kinematics.rotation import (
@@ -38,12 +36,7 @@ from embodisteer.collision import (
     curobo_signed_distance_to_cbf_h,
 )
 from embodisteer.kinematics import (
-    absolute_pose_delta_to_twist6,
-    absolute_pose_to_relative9,
     damped_least_squares_pinv,
-    inv_se3,
-    pose9d_to_mat,
-    relative_pose9_to_absolute,
 )
 from embodisteer.guidance import (
     guidance_scale_at,
@@ -71,15 +64,10 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
         arm_dof: int = -1,
         ik_num_seeds: int = 1,
         jacobian_damping: float = 0.001,
-        ik_refine_each_step: bool = False,
         ik_position_threshold: float = 5e-4,
         ik_rotation_threshold: float = 5e-3,
-        init_noise_scale: float = 0.2,
         max_dq_per_step: float = 0.5,
-        ik_refine_last_step: bool = False,
-        noise_init_mode: str = "jacobian_projected",
         jac_noise_alpha: float = 0.1,
-        cartesian_delta_mode: str = "geometric",
         # guidance parameters (only used when guidance_method != "")
         guidance_method: str = "",
         guidance_scale: float = 1.0,
@@ -90,16 +78,12 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
         guidance_use_schedule: bool = True,
         guidance_schedule_midpoint: float = 0.7,
         guidance_schedule_steepness: float = 50.0,
-        guidance_apply_last_step_only: bool = False,
-        guidance_steps_per_denoise: int = 1,
-        guidance_use_clean_sample: bool = False,
         guidance_cbf_lambda: float = 0.01,
         guidance_sdf_agg: str = "topk",
         guidance_sdf_softmax_temp: float = 20.0,
         guidance_sdf_topk: int = 4,
         guidance_task_pos_weight: float = 1.0,
         guidance_task_rot_weight: float = 1.0,
-        guidance_reuse_jacobian: bool = True,
         **kwargs,
     ):
         if robot_cfg_name is None:
@@ -114,28 +98,14 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
         self.arm_dof = int(arm_dof)
         self.ik_num_seeds = int(ik_num_seeds)
         self.jacobian_damping = float(jacobian_damping)
-        self.ik_refine_each_step = bool(ik_refine_each_step)
         self.ik_position_threshold = float(ik_position_threshold)
         self.ik_rotation_threshold = float(ik_rotation_threshold)
-        self.init_noise_scale = float(init_noise_scale)
         self.max_dq_per_step = float(max_dq_per_step)
-        self.ik_refine_last_step = bool(ik_refine_last_step)
-        self.noise_init_mode = str(noise_init_mode)
         self.jac_noise_alpha = float(jac_noise_alpha)
-        self.cartesian_delta_mode = str(cartesian_delta_mode)
-
-        assert self.noise_init_mode in ("isotropic", "jacobian_projected", "jacobian_diagonal")
-        assert self.cartesian_delta_mode in ("geometric", "se3_delta")
 
         # guidance config
         guidance_method = str(guidance_method).lower().strip()
-        if guidance_method in ("gradient_descent", "gd"):
-            guidance_method = "gd"
-        elif guidance_method == "cbf":
-            guidance_method = "cbf"
-        elif guidance_method == "":
-            guidance_method = ""
-        else:
+        if guidance_method not in ("", "cbf", "gd"):
             raise ValueError(
                 f"Unsupported guidance_method={guidance_method}. "
                 "Use one of: ['', 'cbf', 'gd']"
@@ -150,13 +120,8 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
         self.guidance_use_schedule = bool(guidance_use_schedule)
         self.guidance_schedule_midpoint = float(guidance_schedule_midpoint)
         self.guidance_schedule_steepness = float(guidance_schedule_steepness)
-        self.guidance_apply_last_step_only = bool(guidance_apply_last_step_only)
-        self.guidance_steps_per_denoise = int(max(guidance_steps_per_denoise, 1))
-        self.guidance_use_clean_sample = bool(guidance_use_clean_sample)
         self.guidance_cbf_lambda = float(guidance_cbf_lambda)
         guidance_sdf_agg = str(guidance_sdf_agg).lower()
-        if guidance_sdf_agg == "softmax":
-            guidance_sdf_agg = "topk"
         if guidance_sdf_agg not in ("max", "topk"):
             raise ValueError(f"Unsupported guidance_sdf_agg={guidance_sdf_agg}")
         self.guidance_sdf_agg = guidance_sdf_agg
@@ -164,7 +129,6 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
         self.guidance_sdf_topk = int(max(guidance_sdf_topk, 1))
         self.guidance_task_pos_weight = float(guidance_task_pos_weight)
         self.guidance_task_rot_weight = float(guidance_task_rot_weight)
-        self.guidance_reuse_jacobian = bool(guidance_reuse_jacobian)
 
         # kinematics state (lazy init)
         self._ik_solver = None
@@ -379,41 +343,18 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
         _ = compiled_qp(dummy_jac, dummy_grad_h, dummy_h, dummy_scale)
         self._cbf_qp_fn = compiled_qp
 
-    @staticmethod
-    def _inv_se3(mat: torch.Tensor) -> torch.Tensor:
-        return inv_se3(mat)
-
-    # ===========================
-    # Pose conversions
-    # ===========================
-    def _relative_pose9_to_absolute(
-        self, rel_pose9: torch.Tensor, chunk_start_pose: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        return relative_pose9_to_absolute(rel_pose9, chunk_start_pose)
-
-    def _absolute_pose_to_relative9(
-        self, abs_pos: torch.Tensor, abs_rot: torch.Tensor, chunk_start_pose: torch.Tensor,
-    ) -> torch.Tensor:
-        return absolute_pose_to_relative9(abs_pos, abs_rot, chunk_start_pose)
-
     # ===========================
     # FK / IK / Jacobian helpers
     # ===========================
     def _solve_start_joint_from_pose(self, chunk_start_pose: torch.Tensor) -> torch.Tensor:
-        import time
         B = chunk_start_pose.shape[0]
         start_pos = chunk_start_pose[:, :3]
         start_rot = axis_angle_to_matrix(chunk_start_pose[:, 3:6])
         start_quat = matrix_to_quaternion(start_rot)
         seed = torch.zeros((B, self._robot_dof), device=chunk_start_pose.device, dtype=chunk_start_pose.dtype)
         goal_pose = Pose(position=start_pos, quaternion=start_quat)
-        torch.cuda.synchronize()
-        t0 = time.perf_counter()
         with torch.enable_grad():
             ik_result = self._ik_solver.solve_batch(goal_pose, retract_config=seed)
-        torch.cuda.synchronize()
-        dt = time.perf_counter() - t0
-        print(f"[IK timing] _solve_start_joint_from_pose: batch={B}, time={dt*1000:.1f}ms")
         q = ik_result.solution.squeeze(1)
         if hasattr(ik_result, "success"):
             succ = ik_result.success
@@ -425,7 +366,6 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
     def _ik_from_absolute(
         self, abs_pos: torch.Tensor, abs_rot: torch.Tensor, seed_q: torch.Tensor,
     ) -> torch.Tensor:
-        import time
         B, T, _ = abs_pos.shape
         pos_flat = abs_pos.reshape(-1, 3)
         quat_flat = matrix_to_quaternion(abs_rot.reshape(-1, 3, 3))
@@ -436,92 +376,19 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
         # random seeds. seed_config shape per curobo: (batch, n_seeds, dof).
         n_seeds = int(self.ik_num_seeds)
         seed_cfg = seed_flat.unsqueeze(1).expand(B * T, n_seeds, self._robot_dof).contiguous()
-        torch.cuda.synchronize()
-        t0 = time.perf_counter()
         with torch.enable_grad():
             ik_result = self._ik_solver.solve_batch(
                 goal_pose,
                 retract_config=seed_flat,
                 seed_config=seed_cfg,
             )
-        torch.cuda.synchronize()
-        dt = time.perf_counter() - t0
         q_flat = ik_result.solution.squeeze(1)
-        n_succ = n_tot = 0
         if hasattr(ik_result, "success"):
             succ = ik_result.success
             while succ.ndim > 1:
                 succ = succ.squeeze(-1)
-            n_succ = int(succ.sum().item())
-            n_tot = int(succ.numel())
             q_flat = torch.where(succ.unsqueeze(-1), q_flat, seed_flat)
-        rate = (n_succ / max(n_tot, 1)) if n_tot > 0 else float("nan")
-        # print(f"[IK timing] _ik_from_absolute: batch={B}x{T}={B*T}, "
-        #       f"time={dt*1000:.1f}ms, success={n_succ}/{n_tot} ({rate*100:.1f}%)")
         return q_flat.reshape(B, T, self._robot_dof)
-
-    def _ik_from_absolute_sequential(
-        self, abs_pos: torch.Tensor, abs_rot: torch.Tensor, seed_q: torch.Tensor,
-    ) -> torch.Tensor:
-        """Sequential per-timestep IK: warm-start each step with the previous
-        step's solution to keep IK on the same branch and avoid joint
-        discontinuities for redundant / multi-solution arms.
-
-        Args:
-            abs_pos: (B, T, 3) target ee positions
-            abs_rot: (B, T, 3, 3) target ee rotations
-            seed_q:  (B, T, dof) seed joint angles; only seed_q[:, 0] is used
-                     as the initial seed, subsequent steps warm-start from the
-                     previous step's solution.
-
-        Returns:
-            (B, T, dof) joint trajectory.
-        """
-        import time
-        B, T, _ = abs_pos.shape
-        quat = matrix_to_quaternion(abs_rot.reshape(-1, 3, 3)).reshape(B, T, 4)
-
-        torch.cuda.synchronize()
-        t0 = time.perf_counter()
-
-        q_seed_t = seed_q[:, 0].contiguous()
-        q_out = torch.empty(B, T, self._robot_dof, device=abs_pos.device, dtype=abs_pos.dtype)
-        n_succ_total = 0
-        n_total = 0
-        n_seeds = int(self.ik_num_seeds)
-        for t in range(T):
-            pos_t = abs_pos[:, t].contiguous()
-            quat_t = quat[:, t].contiguous()
-            goal_pose = Pose(position=pos_t, quaternion=quat_t)
-            # Force ALL num_seeds to be the warm-start solution so curobo
-            # does not explore alternative IK branches via random seeds.
-            # seed_config shape per curobo: (batch, n_seeds, dof).
-            # retract_config additionally penalizes deviation in null-space.
-            seed_cfg = q_seed_t.unsqueeze(1).expand(B, n_seeds, self._robot_dof).contiguous()
-            with torch.enable_grad():
-                ik_result = self._ik_solver.solve_batch(
-                    goal_pose,
-                    retract_config=q_seed_t,
-                    seed_config=seed_cfg,
-                )
-            q_t = ik_result.solution.squeeze(1)
-            if hasattr(ik_result, "success"):
-                succ = ik_result.success
-                while succ.ndim > 1:
-                    succ = succ.squeeze(-1)
-                q_t = torch.where(succ.unsqueeze(-1), q_t, q_seed_t)
-                n_succ_total += int(succ.sum().item())
-                n_total += int(succ.numel())
-            q_out[:, t] = q_t
-            q_seed_t = q_t
-
-        torch.cuda.synchronize()
-        dt = time.perf_counter() - t0
-        succ_rate = (n_succ_total / max(n_total, 1)) if n_total > 0 else float("nan")
-        print(f"[IK timing] _ik_from_absolute_sequential: B={B}, T={T}, "
-              f"total={dt*1000:.1f}ms, per-step={dt*1000/T:.1f}ms, "
-              f"success={n_succ_total}/{n_total} ({succ_rate*100:.1f}%)")
-        return q_out
 
     def _fk_to_absolute(self, q_arm: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         B, T, _ = q_arm.shape
@@ -572,15 +439,6 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
             rot_tgt @ rot_cur.transpose(-2, -1)
         )
         return torch.cat([dpos, drot], dim=-1).reshape(bsz, horizon, 6)
-
-    def _absolute_pose_delta_to_twist6(
-        self, abs_pose9_curr: torch.Tensor, abs_pose9_tgt: torch.Tensor,
-    ) -> torch.Tensor:
-        return absolute_pose_delta_to_twist6(
-            abs_pose9_curr,
-            abs_pose9_tgt,
-            getattr(self, "cartesian_delta_mode", "geometric"),
-        )
 
     # ===========================
     # Collision infrastructure (for guidance)
@@ -801,27 +659,6 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
                 grad = torch.zeros_like(q_req)
             return grad.detach(), loss.detach()
 
-    def _estimate_clean_joint_from_cartesian(
-        self, q_arm_ref: torch.Tensor, cart_phys_clean: torch.Tensor, chunk_start_pose: torch.Tensor,
-    ) -> torch.Tensor:
-        bsz, horizon, _ = q_arm_ref.shape
-        abs_pos_ref, abs_rot_ref = self._fk_to_absolute(q_arm_ref)
-        abs_rot6d_ref = matrix_to_rot6d(abs_rot_ref.reshape(-1, 3, 3)).reshape(bsz, horizon, 6)
-        abs_pose9_ref = torch.cat([abs_pos_ref, abs_rot6d_ref], dim=-1)
-        abs_pos_clean, abs_rot_clean = self._relative_pose9_to_absolute(
-            cart_phys_clean[..., :9], chunk_start_pose
-        )
-        abs_rot6d_clean = matrix_to_rot6d(abs_rot_clean.reshape(-1, 3, 3)).reshape(bsz, horizon, 6)
-        abs_pose9_clean = torch.cat([abs_pos_clean, abs_rot6d_clean], dim=-1)
-        twist_to_clean = self._absolute_pose_delta_to_twist6(abs_pose9_ref, abs_pose9_clean)
-        jac_ref = self._jacobian(q_arm_ref)
-        dq_clean = self._dls_pinv_map(
-            twist_to_clean.reshape(-1, 6), jac_ref
-        ).reshape(bsz, horizon, self._robot_dof)
-        if self.max_dq_per_step > 0:
-            dq_clean = torch.clamp(dq_clean, -self.max_dq_per_step, self.max_dq_per_step)
-        return q_arm_ref + dq_clean
-
     # ===========================
     # Inference
     # ===========================
@@ -835,7 +672,6 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
         chunk_start_pose: Optional[torch.Tensor] = None,
         obstacle_info=None,
         current_joint_angles: Optional[torch.Tensor] = None,
-        return_debug: bool = False,
         **kwargs,
     ):
         if chunk_start_pose is None:
@@ -880,33 +716,14 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
         trajectory_cart = self.normalizer["action"].unnormalize(trajectory_cart_n)
         grip = trajectory_cart[..., 9:10]
 
-        if self.noise_init_mode == "jacobian_projected":
-            jac_init = self._jacobian(q_seed)
-            eps_twist = torch.randn(
-                (bsz * horizon, 6), device=q_seed.device, dtype=q_seed.dtype, generator=generator,
-            )
-            dq_init = self._dls_pinv_map(eps_twist, jac_init).reshape(bsz, horizon, self._robot_dof)
-            if self.max_dq_per_step > 0:
-                dq_init = torch.clamp(dq_init, -self.max_dq_per_step, self.max_dq_per_step)
-            q_arm = q_seed + dq_init * self.jac_noise_alpha
-        elif self.noise_init_mode == "jacobian_diagonal":
-            jac_init = self._jacobian(q_seed)
-            jt = jac_init.transpose(-2, -1)
-            jjt = jac_init @ jt
-            eye6 = torch.eye(6, device=jac_init.device, dtype=jac_init.dtype).unsqueeze(0)
-            Jpinv = torch.linalg.solve(jjt + self.jacobian_damping * eye6, jac_init).transpose(-2, -1)
-            Sigma_q = Jpinv @ Jpinv.transpose(-2, -1)
-            per_joint_std = torch.sqrt(torch.clamp(torch.diagonal(Sigma_q, dim1=-2, dim2=-1), min=1e-8))
-            mean_std = per_joint_std.mean(dim=-1, keepdim=True)
-            per_joint_std = per_joint_std / mean_std * self.jac_noise_alpha
-            per_joint_std = per_joint_std.reshape(bsz, horizon, self._robot_dof)
-            q_arm = q_seed + torch.randn(
-                q_seed.shape, device=q_seed.device, dtype=q_seed.dtype, generator=generator,
-            ) * per_joint_std
-        else:
-            q_arm = q_seed + torch.randn(
-                q_seed.shape, device=q_seed.device, dtype=q_seed.dtype, generator=generator,
-            ) * self.init_noise_scale
+        jac_init = self._jacobian(q_seed)
+        eps_twist = torch.randn(
+            (bsz * horizon, 6), device=q_seed.device, dtype=q_seed.dtype, generator=generator,
+        )
+        dq_init = self._dls_pinv_map(eps_twist, jac_init).reshape(bsz, horizon, self._robot_dof)
+        if self.max_dq_per_step > 0:
+            dq_init = torch.clamp(dq_init, -self.max_dq_per_step, self.max_dq_per_step)
+        q_arm = q_seed + dq_init * self.jac_noise_alpha
 
         q_traj = torch.cat([q_arm, grip], dim=-1)
 
@@ -926,18 +743,6 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
 
         # ── 4) Denoising in joint space
         scheduler.set_timesteps(self.num_inference_steps)
-        debug = {
-            "step_cart_l2": [],
-            "guidance_loss": [],
-            "guidance_grad_norm": [],
-            "clean_sample_cart_err_before": [],
-            "clean_sample_cart_err_after": [],
-        }
-        timing = {
-            "guidance_total": 0.0,
-            "guidance_grad": 0.0,
-            "guidance_apply": 0.0,
-        }
         timesteps = list(scheduler.timesteps)
         n_steps = len(timesteps)
 
@@ -959,21 +764,6 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
             cart_n_curr[condition_mask] = condition_data[condition_mask]
 
             eps_cart_n = model(cart_n_curr, t, local_cond=local_cond, global_cond=global_cond)
-
-            # Predicted clean Cartesian sample (for guidance_use_clean_sample)
-            cart_phys_clean = None
-            if use_guidance and self.guidance_use_clean_sample:
-                pred_type = self.noise_scheduler.config.prediction_type
-                if pred_type == "epsilon":
-                    alpha_prod_t = self.noise_scheduler.alphas_cumprod[t]
-                    alpha_prod_t = alpha_prod_t.to(device=cart_n_curr.device, dtype=cart_n_curr.dtype)
-                    cart_n_clean = get_pred_x0(eps_cart_n, cart_n_curr, alpha_prod_t)
-                elif pred_type == "sample":
-                    cart_n_clean = eps_cart_n
-                else:
-                    cart_n_clean = cart_n_curr
-                cart_n_clean[condition_mask] = condition_data[condition_mask]
-                cart_phys_clean = self.normalizer["action"].unnormalize(cart_n_clean)
 
             # Scheduler step in normalized Cartesian space
             cart_n_prev_tgt = scheduler.step(
@@ -1001,116 +791,36 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
                 dq = torch.clamp(dq, -self.max_dq_per_step, self.max_dq_per_step)
             q_arm_new = q_arm_curr + dq
 
-            # Optional IK refine
-            is_last = (idx == n_steps - 1)
-            if self.ik_refine_each_step or (is_last and self.ik_refine_last_step):
-                q_arm_new = self._ik_from_absolute(abs_pos_tgt, abs_rot_tgt, q_arm_new)
-
             # ── Guidance application
             if use_guidance and self._world_collision is not None:
-                apply_guidance = True
-                if self.guidance_apply_last_step_only and not is_last:
-                    apply_guidance = False
-
-                if apply_guidance:
-                    t0 = time.perf_counter()
-
-                    if self.guidance_use_clean_sample and cart_phys_clean is not None:
-                        q_guidance_state = self._estimate_clean_joint_from_cartesian(
-                            q_arm_ref=q_arm_new, cart_phys_clean=cart_phys_clean,
-                            chunk_start_pose=chunk_start_pose,
-                        )
+                if self.guidance_method == "cbf":
+                    h_value, grad_h, _ = self._compute_cbf_linearization(q_arm_new)
+                    state_change = (q_arm_new - q_ref_for_jac).abs().max()
+                    if state_change < 0.5:
+                        jac_lin = jac_ref.reshape(bsz, horizon, 6, self._robot_dof)
                     else:
-                        q_guidance_state = q_arm_new
-
-                    q_before_guidance = q_arm_new.clone()
-                    for _ in range(self.guidance_steps_per_denoise):
-                        if self.guidance_method == "cbf":
-                            tg = time.perf_counter()
-                            h_value, grad_h, _ = self._compute_cbf_linearization(q_guidance_state)
-                            if self.guidance_reuse_jacobian and not self.guidance_use_clean_sample and q_ref_for_jac is not None:
-                                state_change = (q_guidance_state - q_ref_for_jac).abs().max()
-                                if state_change < 0.5:
-                                    jac_lin = jac_ref.reshape(bsz, horizon, 6, self._robot_dof)
-                                else:
-                                    jac_lin = self._jacobian(q_guidance_state).reshape(bsz, horizon, 6, self._robot_dof)
-                            else:
-                                jac_lin = self._jacobian(q_guidance_state).reshape(bsz, horizon, 6, self._robot_dof)
-                            gamma = self._guidance_scale_at(idx, n_steps, t, q_arm_new.dtype, q_arm_new.device)
-                            dq_cbf, _, _, _ = self._cbf_qp_fn(jac_lin, grad_h, h_value, gamma)
-                            timing["guidance_grad"] += time.perf_counter() - tg
-
-                            if torch.any(cond_step_mask):
-                                dq_cbf = dq_cbf.clone()
-                                dq_cbf[cond_step_mask] = 0.0
-
-                            ta = time.perf_counter()
-                            if self.guidance_grad_clip > 0:
-                                dq_cbf = torch.clamp(dq_cbf, -self.guidance_grad_clip, self.guidance_grad_clip)
-                            q_arm_new = q_arm_new + dq_cbf
-                            q_guidance_state = q_guidance_state + dq_cbf
-                            timing["guidance_apply"] += time.perf_counter() - ta
-
-                            if return_debug:
-                                cbf_violation = torch.relu(self.guidance_safety_margin - h_value)
-                                debug["guidance_loss"].append(cbf_violation.sum().detach().cpu())
-                                debug["guidance_grad_norm"].append(
-                                    torch.linalg.norm(grad_h.reshape(bsz, -1), dim=-1).detach().cpu()
-                                )
-                        else:  # gd
-                            tg = time.perf_counter()
-                            grad, guide_loss = self._compute_collision_grad(q_guidance_state)
-                            timing["guidance_grad"] += time.perf_counter() - tg
-
-                            if torch.any(cond_step_mask):
-                                grad = grad.clone()
-                                grad[cond_step_mask] = 0.0
-
-                            ta = time.perf_counter()
-                            if self.guidance_grad_clip > 0:
-                                grad = torch.clamp(grad, -self.guidance_grad_clip, self.guidance_grad_clip)
-                            gamma = self._guidance_scale_at(idx, n_steps, t, q_arm_new.dtype, q_arm_new.device)
-                            q_arm_new = q_arm_new - gamma * grad
-                            q_guidance_state = q_guidance_state - gamma * grad
-                            timing["guidance_apply"] += time.perf_counter() - ta
-
-                            if return_debug:
-                                debug["guidance_loss"].append(guide_loss.detach().cpu())
-                                debug["guidance_grad_norm"].append(
-                                    torch.linalg.norm(grad.reshape(bsz, -1), dim=-1).detach().cpu()
-                                )
-                    timing["guidance_total"] += time.perf_counter() - t0
-
-                    if return_debug and self.guidance_use_clean_sample:
-                        abs_p_before, abs_r_before = self._fk_to_absolute(q_before_guidance)
-                        rel9_before = self._absolute_pose_to_relative9(abs_p_before, abs_r_before, chunk_start_pose)
-                        cart_before = torch.cat([rel9_before, cart_phys_prev_tgt[..., 9:10]], dim=-1)
-                        err_before = torch.linalg.norm(
-                            (cart_before[..., :9] - cart_phys_clean[..., :9]).reshape(bsz, -1), dim=-1
+                        jac_lin = self._jacobian(q_arm_new).reshape(
+                            bsz, horizon, 6, self._robot_dof
                         )
-                        abs_p_after, abs_r_after = self._fk_to_absolute(q_arm_new)
-                        rel9_after = self._absolute_pose_to_relative9(abs_p_after, abs_r_after, chunk_start_pose)
-                        cart_after = torch.cat([rel9_after, cart_phys_prev_tgt[..., 9:10]], dim=-1)
-                        err_after = torch.linalg.norm(
-                            (cart_after[..., :9] - cart_phys_clean[..., :9]).reshape(bsz, -1), dim=-1
-                        )
-                        debug["clean_sample_cart_err_before"].append(err_before.detach().cpu())
-                        debug["clean_sample_cart_err_after"].append(err_after.detach().cpu())
+                    gamma = self._guidance_scale_at(idx, n_steps, t, q_arm_new.dtype, q_arm_new.device)
+                    dq_cbf, _, _, _ = self._cbf_qp_fn(jac_lin, grad_h, h_value, gamma)
+                    if torch.any(cond_step_mask):
+                        dq_cbf = dq_cbf.clone()
+                        dq_cbf[cond_step_mask] = 0.0
+                    if self.guidance_grad_clip > 0:
+                        dq_cbf = torch.clamp(dq_cbf, -self.guidance_grad_clip, self.guidance_grad_clip)
+                    q_arm_new = q_arm_new + dq_cbf
+                else:  # gd
+                    grad, _ = self._compute_collision_grad(q_arm_new)
+                    if torch.any(cond_step_mask):
+                        grad = grad.clone()
+                        grad[cond_step_mask] = 0.0
+                    if self.guidance_grad_clip > 0:
+                        grad = torch.clamp(grad, -self.guidance_grad_clip, self.guidance_grad_clip)
+                    gamma = self._guidance_scale_at(idx, n_steps, t, q_arm_new.dtype, q_arm_new.device)
+                    q_arm_new = q_arm_new - gamma * grad
 
             q_traj = torch.cat([q_arm_new, cart_phys_prev_tgt[..., 9:10]], dim=-1)
-
-            if return_debug:
-                q_arm_dbg = q_traj[..., : self._robot_dof]
-                abs_p, abs_r = self._fk_to_absolute(q_arm_dbg)
-                rel9 = self._absolute_pose_to_relative9(abs_p, abs_r, chunk_start_pose)
-                cart_phys_after = torch.cat(
-                    [rel9, q_traj[..., self._robot_dof : self._robot_dof + 1]], dim=-1
-                )
-                debug["step_cart_l2"].append(
-                    torch.linalg.norm(
-                        (cart_phys_after - cart_phys_prev_tgt).reshape(bsz, -1), dim=-1
-                    ).detach().cpu()
-                )
 
         if q_cond is not None:
             q_traj[cond_step_mask] = q_cond[cond_step_mask]
@@ -1127,20 +837,15 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
         cart_final = torch.cat([rel_pos_f, rel_rot6d_f, grip_final], dim=-1)
         cart_final_n = self.normalizer["action"].normalize(cart_final)
         cart_final_n[condition_mask] = condition_data[condition_mask]
-        if return_debug:
-            debug["timing_guidance"] = timing
-            return cart_final_n, q_traj, debug
         return cart_final_n
 
     def predict_action(
         self,
         obs_dict: Dict[str, torch.Tensor],
-        fixed_action_prefix: torch.Tensor = None,
         env_batched=False,
         chunk_start_pose: torch.Tensor = None,
         obstacle_info=None,
         current_joint_angles: Optional[torch.Tensor] = None,
-        return_debug: bool = False,
     ) -> Dict[str, Any]:
         assert "past_action" not in obs_dict
 
@@ -1164,12 +869,6 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
             )
         cond_mask = torch.zeros_like(cond_data, dtype=torch.bool)
 
-        if fixed_action_prefix is not None and self.inpaint_fixed_action_prefix:
-            n_fixed_steps = fixed_action_prefix.shape[1]
-            cond_data[:, :n_fixed_steps] = fixed_action_prefix
-            cond_mask[:, :n_fixed_steps] = True
-            cond_data = self.normalizer["action"].normalize(cond_data)
-
         if chunk_start_pose is None:
             raise ValueError("chunk_start_pose must be provided for joint-space policy inference.")
 
@@ -1181,14 +880,9 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
             chunk_start_pose=chunk_start_pose,
             obstacle_info=obstacle_info,
             current_joint_angles=current_joint_angles,
-            return_debug=return_debug,
             **self.kwargs,
         )
-        debug = None
-        if return_debug:
-            nsample, _, debug = sample_result
-        else:
-            nsample = sample_result
+        nsample = sample_result
 
         if env_batched:
             assert nsample.shape == (B * env_batch_size, self.action_horizon, self.action_dim)
@@ -1212,8 +906,6 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
         if joint_action_pred is not None:
             result["joint_action"] = joint_action_pred
             result["joint_action_pred"] = joint_action_pred
-        if debug is not None:
-            result["debug"] = debug
         return result
 
 

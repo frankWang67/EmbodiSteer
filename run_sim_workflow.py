@@ -72,7 +72,6 @@ EVALUATION_RUNTIME_FIELDS = (
     "sim_backend",
     "num_env",
     "num_eval_episodes",
-    "env_seed",
     "obs_mode",
     "render_mode",
     "steps_per_inference",
@@ -145,8 +144,6 @@ def _validate_effective_profile(
     _validate_robot_list(runtime["robots"], f"evaluation.profiles.{name}.robots")
     for field in ("num_env", "num_eval_episodes", "max_episode_steps"):
         _validate_positive_integer(runtime[field], f"evaluation.profiles.{name}.{field}")
-    if isinstance(runtime["env_seed"], bool) or not isinstance(runtime["env_seed"], int):
-        raise WorkflowConfigError(f"evaluation.profiles.{name}.env_seed must be an integer")
     for field in ("sim_backend", "obs_mode", "render_mode"):
         if not isinstance(runtime[field], str) or not runtime[field]:
             raise WorkflowConfigError(
@@ -221,7 +218,7 @@ def load_workflow_config(
         "collection": ("robot_uids", "total_trajectories", "obs_mode", "control_mode", "sim_backend_gen", "sim_backend_replay", "num_procs"),
         "conversion": ("camera_name", "image_size"),
         "training": ("config_dir", "config_name", "device", "logging_mode", "overrides"),
-        "evaluation": ("profiles", "robots", "sim_backend", "num_env", "num_eval_episodes", "env_seed", "obs_mode", "render_mode", "steps_per_inference", "max_episode_steps", "obstacle"),
+        "evaluation": ("profiles", "robots", "sim_backend", "num_env", "num_eval_episodes", "obs_mode", "render_mode", "steps_per_inference", "max_episode_steps", "obstacle"),
     }
     if stage == "eval":
         required["task"] = ("env_id",)
@@ -489,7 +486,6 @@ def build_evaluation_jobs(config: Mapping[str, Any]) -> list[dict[str, Any]]:
                 "--sim_backend", str(runtime["sim_backend"]),
                 "--num_env", str(runtime["num_env"]),
                 "--num_eval_episodes", str(runtime["num_eval_episodes"]),
-                "--env_seed", str(runtime["env_seed"]),
                 "--obs_mode", str(runtime["obs_mode"]),
                 "--render_mode", str(runtime["render_mode"]),
                 "--steps_per_inference", str(runtime["steps_per_inference"]),

@@ -58,7 +58,6 @@ evaluation:
   sim_backend: physx_cpu
   num_env: 10
   num_eval_episodes: 100
-  env_seed: 2022
   obs_mode: rgb
   render_mode: all
   # Zero selects the action horizon stored in the newly trained checkpoint

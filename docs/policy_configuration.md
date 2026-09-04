@@ -33,7 +33,7 @@ Algorithm settings belong in the policy YAML:
 - guidance scale and schedule shape, safety margin, gradient clamp,
   end-effector collision points, SDF reduction and task weights;
 - CBF settings;
-- Jacobian damping, initialization noise and optional IK refinement; and
+- Jacobian damping, projected-noise scale and joint-update clip; and
 - post-hoc CBF, batch-sampling and JM2D baseline settings.
 
 Operational values remain command-line arguments because they identify a

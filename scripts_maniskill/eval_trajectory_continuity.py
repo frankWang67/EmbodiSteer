@@ -496,7 +496,6 @@ def run_worker(args: argparse.Namespace) -> None:
             "robot_uid": robot_uid,
             "checkpoint": str(checkpoint),
             "env_id": args.env_id,
-            "env_seed": args.env_seed,
             "num_env": args.num_env,
             "num_eval_episodes": args.num_eval_episodes,
             "steps_per_inference": args.steps_per_inference,
@@ -522,7 +521,6 @@ def run_worker(args: argparse.Namespace) -> None:
         "--control_mode", args.control_mode,
         "--num_env", str(args.num_env),
         "--num_eval_episodes", str(args.num_eval_episodes),
-        "--env_seed", str(args.env_seed),
         "--obs_mode", args.obs_mode,
         "--render_mode", args.render_mode,
         "--steps_per_inference", str(args.steps_per_inference),
@@ -545,7 +543,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--control-mode", "-c", default="pd_joint_pos")
     parser.add_argument("--num-env", "-n", type=int, default=1)
     parser.add_argument("--num-eval-episodes", "-ne", type=int, default=1)
-    parser.add_argument("--env-seed", type=int, default=2022)
     parser.add_argument("--obs-mode", default="rgb")
     parser.add_argument("--render-mode", default="rgb_array")
     parser.add_argument("--steps-per-inference", "-si", type=int, default=0)
@@ -561,10 +558,10 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _default_output_dir(input_path: str, env_seed: int) -> Path:
+def _default_output_dir(input_path: str) -> Path:
     input_resolved = Path(input_path).expanduser().resolve()
     experiment_root = input_resolved if input_resolved.is_dir() else input_resolved.parent.parent
-    return experiment_root / "continuity_results" / f"panda_ur5_seed{env_seed}"
+    return experiment_root / "continuity_results" / "panda_ur5"
 
 
 def _worker_command(args: argparse.Namespace, robot: str, output_dir: Path) -> list[str]:
@@ -578,7 +575,6 @@ def _worker_command(args: argparse.Namespace, robot: str, output_dir: Path) -> l
         "--control-mode", args.control_mode,
         "--num-env", str(args.num_env),
         "--num-eval-episodes", str(args.num_eval_episodes),
-        "--env-seed", str(args.env_seed),
         "--obs-mode", args.obs_mode,
         "--render-mode", args.render_mode,
         "--steps-per-inference", str(args.steps_per_inference),
@@ -604,7 +600,7 @@ def main(argv: Iterable[str] | None = None) -> None:
     output_dir = (
         Path(args.output_dir).expanduser().resolve()
         if args.output_dir is not None
-        else _default_output_dir(args.input, args.env_seed)
+        else _default_output_dir(args.input)
     )
 
     if args.worker_robot is not None:

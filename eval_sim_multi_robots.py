@@ -23,7 +23,6 @@ parser.add_argument("--sim-backend", "-s", type=str, default="physx_cpu", help="
 parser.add_argument("--control-mode", "-c", type=str, default=None, help="ManiSkill control mode; inferred from the policy config when omitted")
 parser.add_argument("--num-env", "-n", type=int, default=10, help="Number of parallel environments")
 parser.add_argument("--num-eval-episodes", "-ne", type=int, default=100, help="Number of evaluation episodes")
-parser.add_argument("--env-seed", "--env_seed", dest="env_seed", type=int, default=2022, help="Compatibility metadata; the paper protocol keeps env.reset() unseeded")
 parser.add_argument("--obs-mode", "-o", type=str, default="rgb", help="Observation mode for ManiSkill env")
 parser.add_argument("--render-mode", "-rm", type=str, default="rgb_array", help="Render mode for ManiSkill env")
 parser.add_argument("--steps-per-inference", "-si", type=int, default=8, help="Number of predicted actions to execute per policy call. Use 0 to execute the checkpoint action horizon.")
@@ -172,7 +171,6 @@ def build_command(task):
         "--control_mode", args.control_mode,
         "--num_env", str(args.num_env),
         "--num_eval_episodes", str(args.num_eval_episodes),
-        "--env_seed", str(args.env_seed),
         "--obs_mode", args.obs_mode,
         "--render_mode", args.render_mode,
         "--steps_per_inference", str(args.steps_per_inference),

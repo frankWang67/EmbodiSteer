@@ -35,12 +35,10 @@ iteration performs the following operations:
    Delta q = J^T (J J^T + lambda I)^(-1) Delta x.
    ```
 
-6. The update is clipped when configured, applied to the joint trajectory,
-   and optionally refined with IK. Fixed action-prefix states are restored
-   after every iteration.
+6. The update is clipped when configured and applied to the joint trajectory.
 
-The initial trajectory can use isotropic joint noise, Jacobian-projected task
-noise, or a diagonal approximation to the Jacobian-induced joint covariance.
+The initial trajectory uses Jacobian-projected task noise around the chunk-start
+configuration, with a global scale and per-joint update clip.
 The final result is converted through FK to the normal Cartesian action API,
 while the joint trajectory is exposed for joint-position control.
 
@@ -87,8 +85,7 @@ receive different weights through `W`; regularization keeps `H` invertible.
 
 Gradient guidance instead minimizes
 the hinge penalty `relu(d_curobo + m)^p` directly in joint space. Both modes
-can apply multiple corrections per denoising step, clamp joint corrections,
-operate on a predicted clean sample, or run only at the last step.
+apply one correction per denoising step and clamp the resulting joint update.
 
 With scheduling enabled, the guidance multiplier follows a logistic curve and
 becomes strongest near the end of denoising. This leaves early sampling more

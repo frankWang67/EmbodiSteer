@@ -34,16 +34,12 @@ DEFAULT_POLICY_CONFIG: dict[str, Any] = {
     "guidance_activation_distance": 1.0,
     "guidance_grad_clip": 0.1,
     "guidance_loss_power": 2.0,
-    "guidance_steps_per_denoise": 1,
     "guidance_cbf_lambda": 0.01,
     "guidance_sdf_agg": "topk",
     "guidance_sdf_softmax_temp": 20.0,
     "guidance_sdf_topk": 4,
     "guidance_task_pos_weight": 1.0,
     "guidance_task_rot_weight": 0.1,
-    "guidance_use_clean_sample": False,
-    "guidance_apply_last_step_only": False,
-    "guidance_reuse_jacobian": True,
     "guidance_eef_corner_points": [
         [0.01, 0.043, 0.01],
         [0.01, -0.043, 0.01],
@@ -55,31 +51,21 @@ DEFAULT_POLICY_CONFIG: dict[str, Any] = {
         [-0.01, -0.043, -0.03],
     ],
     "jacobian_damping": 0.001,
-    "ik_refine_each_step": False,
-    "ik_refine_last_step": False,
     "ik_position_threshold": 5e-4,
     "ik_rotation_threshold": 5e-3,
     "ik_num_seeds": 1,
-    "init_noise_scale": 0.2,
-    "noise_init_mode": "jacobian_projected",
     "jac_noise_alpha": 0.1,
     "max_dq_per_step": 0.5,
-    "cartesian_delta_mode": "geometric",
 }
 
 JOINT_POLICY_KEYS = (
     "num_inference_steps",
     "jacobian_damping",
-    "ik_refine_each_step",
-    "ik_refine_last_step",
     "ik_position_threshold",
     "ik_rotation_threshold",
     "ik_num_seeds",
-    "init_noise_scale",
-    "noise_init_mode",
     "jac_noise_alpha",
     "max_dq_per_step",
-    "cartesian_delta_mode",
     "guidance_scale",
     "guidance_use_schedule",
     "guidance_schedule_midpoint",
@@ -88,30 +74,21 @@ JOINT_POLICY_KEYS = (
     "guidance_activation_distance",
     "guidance_grad_clip",
     "guidance_loss_power",
-    "guidance_steps_per_denoise",
-    "guidance_use_clean_sample",
-    "guidance_apply_last_step_only",
     "guidance_cbf_lambda",
     "guidance_sdf_agg",
     "guidance_sdf_softmax_temp",
     "guidance_sdf_topk",
     "guidance_task_pos_weight",
     "guidance_task_rot_weight",
-    "guidance_reuse_jacobian",
 )
 
 IK_POLICY_KEYS = {
     "jacobian_damping",
-    "ik_refine_each_step",
-    "ik_refine_last_step",
     "ik_position_threshold",
     "ik_rotation_threshold",
     "ik_num_seeds",
-    "init_noise_scale",
-    "noise_init_mode",
     "jac_noise_alpha",
     "max_dq_per_step",
-    "cartesian_delta_mode",
 }
 
 
@@ -212,8 +189,6 @@ def load_policy_config(path: str | Path) -> dict[str, Any]:
         "policy.baseline.jm2d",
     )
     ik_short_names = {
-        "refine_each_step",
-        "refine_last_step",
         "position_threshold",
         "rotation_threshold",
         "num_seeds",
@@ -304,14 +279,10 @@ def validate_policy_config(values: Mapping[str, Any]) -> None:
         raise PolicyConfigError("baseline.jm2d.temperature must be positive")
     if float(values["jm2d_eta"]) < 0:
         raise PolicyConfigError("baseline.jm2d.eta must be non-negative")
-    if int(values["guidance_steps_per_denoise"]) < 1:
-        raise PolicyConfigError("guidance.steps_per_denoise must be at least 1")
     if float(values["guidance_loss_power"]) <= 0:
         raise PolicyConfigError("guidance.loss_power must be positive")
-    if str(values["guidance_sdf_agg"]).lower() not in ("max", "topk", "softmax"):
-        raise PolicyConfigError(
-            "guidance.sdf_agg must be 'max', 'topk' or 'softmax'"
-        )
+    if str(values["guidance_sdf_agg"]).lower() not in ("max", "topk"):
+        raise PolicyConfigError("guidance.sdf_agg must be 'max' or 'topk'")
     if int(values["guidance_sdf_topk"]) < 1:
         raise PolicyConfigError("guidance.sdf_topk must be at least 1")
     if float(values["guidance_sdf_softmax_temp"]) <= 0:
@@ -344,8 +315,6 @@ def validate_policy_config(values: Mapping[str, Any]) -> None:
         raise PolicyConfigError("ik.position_threshold must be positive")
     if float(values["ik_rotation_threshold"]) <= 0:
         raise PolicyConfigError("ik.rotation_threshold must be positive")
-    if float(values["init_noise_scale"]) < 0:
-        raise PolicyConfigError("ik.init_noise_scale must be non-negative")
     if float(values["jac_noise_alpha"]) < 0:
         raise PolicyConfigError("ik.jac_noise_alpha must be non-negative")
     corners = values["guidance_eef_corner_points"]
@@ -360,26 +329,9 @@ def validate_policy_config(values: Mapping[str, Any]) -> None:
             finite = False
         if not finite:
             raise PolicyConfigError("guidance.eef_corner_points must contain finite values")
-    for key in (
-        "guidance_use_schedule",
-        "guidance_use_clean_sample",
-        "guidance_apply_last_step_only",
-        "guidance_reuse_jacobian",
-        "ik_refine_each_step",
-        "ik_refine_last_step",
-    ):
+    for key in ("guidance_use_schedule",):
         if not isinstance(values[key], bool):
             raise PolicyConfigError(f"{key} must be a YAML boolean")
-    if str(values["noise_init_mode"]) not in (
-        "isotropic",
-        "jacobian_projected",
-        "jacobian_diagonal",
-    ):
-        raise PolicyConfigError(
-            "ik.noise_init_mode must be isotropic, jacobian_projected or jacobian_diagonal"
-        )
-    if str(values["cartesian_delta_mode"]) not in ("geometric", "se3_delta"):
-        raise PolicyConfigError("ik.cartesian_delta_mode must be geometric or se3_delta")
 
 
 def joint_policy_overrides(values: Mapping[str, Any]) -> dict[str, Any]:

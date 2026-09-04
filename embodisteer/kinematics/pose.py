@@ -97,29 +97,17 @@ def twist6_from_matrices(
 def absolute_pose_delta_to_twist6(
     abs_pose9_curr: torch.Tensor,
     abs_pose9_tgt: torch.Tensor,
-    cartesian_delta_mode: str = "geometric",
 ) -> torch.Tensor:
     """Convert two pose-9D trajectories to translational/rotational twists."""
     batch, horizon, _ = abs_pose9_curr.shape
     cur_flat = abs_pose9_curr.reshape(-1, 9)
     tgt_flat = abs_pose9_tgt.reshape(-1, 9)
-    if cartesian_delta_mode == "se3_delta":
-        t_cur = pose9d_to_mat(cur_flat)
-        t_tgt = pose9d_to_mat(tgt_flat)
-        t_delta = t_tgt @ inv_se3(t_cur)
-        dpos = t_delta[:, :3, 3]
-        drot = matrix_to_axis_angle(t_delta[:, :3, :3])
-    elif cartesian_delta_mode == "geometric":
-        pos_cur = cur_flat[:, :3]
-        rot_cur = rotation_6d_to_matrix(cur_flat[:, 3:])
-        pos_tgt = tgt_flat[:, :3]
-        rot_tgt = rotation_6d_to_matrix(tgt_flat[:, 3:])
-        dpos = pos_tgt - pos_cur
-        drot = matrix_to_axis_angle(rot_tgt @ rot_cur.transpose(-2, -1))
-    else:
-        raise ValueError(
-            "cartesian_delta_mode must be 'geometric' or 'se3_delta'"
-        )
+    pos_cur = cur_flat[:, :3]
+    rot_cur = rotation_6d_to_matrix(cur_flat[:, 3:])
+    pos_tgt = tgt_flat[:, :3]
+    rot_tgt = rotation_6d_to_matrix(tgt_flat[:, 3:])
+    dpos = pos_tgt - pos_cur
+    drot = matrix_to_axis_angle(rot_tgt @ rot_cur.transpose(-2, -1))
     return torch.cat([dpos, drot], dim=-1).reshape(batch, horizon, 6)
 
 

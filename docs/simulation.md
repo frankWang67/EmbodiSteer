@@ -115,9 +115,8 @@ profile is enabled.
 Use `--resume` to skip completed profile/robot jobs or `--force` to rerun them
 in place. A failed job is recorded and, by default, the remaining matrix is
 still evaluated; set `evaluation.continue_on_error: false` to stop at the first
-failure. Because the paper protocol uses unseeded `env.reset()`, manifests label
-the reset protocol explicitly; `env_seed` is retained only as an operational
-compatibility argument.
+failure. The paper protocol uses unseeded `env.reset()`, and manifests label
+that reset protocol explicitly.
 
 Select physical GPUs through `CUDA_VISIBLE_DEVICES`; the workflow passes the
 environment through unchanged to collection, training and evaluation. For

@@ -47,7 +47,7 @@ guidance_defaults:
   task_rotation_weight: 0.1
   guidance_clip: 0.1
 evaluation:
-  seed: 2022
+  reset_protocol: unseeded_env_reset
   episodes_per_robot: 100
   collision_occurrence_metric: Fail@All
   collision_count_semantics: colliding simulation steps per episode

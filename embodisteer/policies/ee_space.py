@@ -51,7 +51,6 @@ class DiffusionUnetTimmPolicyEESpace(BaseImagePolicy):
             n_groups=8,
             cond_predict_scale=True,
             input_pertub=0.1,
-            inpaint_fixed_action_prefix=False,
             train_diffusion_n_samples=1,
             use_ee_guidance=False,
             guidance_scale=1.0,
@@ -98,7 +97,6 @@ class DiffusionUnetTimmPolicyEESpace(BaseImagePolicy):
         self.action_horizon = action_horizon
         self.obs_as_global_cond = obs_as_global_cond
         self.input_pertub = input_pertub
-        self.inpaint_fixed_action_prefix = inpaint_fixed_action_prefix
         self.train_diffusion_n_samples = int(train_diffusion_n_samples)
         self.use_ee_guidance = bool(use_ee_guidance)
         self.guidance_scale = float(guidance_scale)
@@ -113,6 +111,10 @@ class DiffusionUnetTimmPolicyEESpace(BaseImagePolicy):
             self.eef_corner_pts = torch.as_tensor(
                 eef_corner_points, dtype=torch.float32
             )
+        # This policy always samples a complete action chunk. Consume the
+        # checkpoint-compatibility field here rather than forwarding it to the
+        # scheduler.
+        kwargs.pop("inpaint_fixed_action_prefix", None)
         self.kwargs = kwargs
 
         if num_inference_steps is None:
@@ -216,7 +218,6 @@ class DiffusionUnetTimmPolicyEESpace(BaseImagePolicy):
 
     def predict_action(self,
         obs_dict: Dict[str, torch.Tensor],
-        fixed_action_prefix: torch.Tensor=None,
         env_batched=False,
         chunk_start_pose: torch.Tensor=None,
         obstacle_info=[],
@@ -237,12 +238,6 @@ class DiffusionUnetTimmPolicyEESpace(BaseImagePolicy):
         else:
             cond_data = torch.zeros(size=(B, self.action_horizon, self.action_dim), device=self.device, dtype=self.dtype)
         cond_mask = torch.zeros_like(cond_data, dtype=torch.bool)
-
-        if fixed_action_prefix is not None and self.inpaint_fixed_action_prefix:
-            n_fixed_steps = fixed_action_prefix.shape[1]
-            cond_data[:, :n_fixed_steps] = fixed_action_prefix
-            cond_mask[:, :n_fixed_steps] = True
-            cond_data = self.normalizer['action'].normalize(cond_data)
 
         nsample = self.conditional_sample(
             condition_data=cond_data,

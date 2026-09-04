@@ -53,7 +53,6 @@ evaluation:
   sim_backend: physx_cpu
   num_env: 1
   num_eval_episodes: 1
-  env_seed: 2022
   obs_mode: rgb
   render_mode: rgb_array
   steps_per_inference: 8

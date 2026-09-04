@@ -13,7 +13,7 @@ python eval_real.py \
 ```
 
 The policy YAML selects Cartesian or joint-space inference, guidance, CBF/SDF
-settings and IK refinement. The paper profile selects joint-space CBF
+settings. The paper profile selects joint-space CBF
 guidance. Compatible checkpoint Hydra targets are normalized to the public
 `EmbodiSteerJointPolicy` alias at runtime.
 

@@ -328,8 +328,6 @@ def configure_method(base_cfg, method, policy_settings):
         add_robot_and_guidance_config(cfg, policy_settings)
         with open_dict(cfg.policy):
             cfg.policy.guidance_method = policy_settings["guidance"]
-            cfg.policy.guidance_use_clean_sample = False
-            cfg.policy.guidance_apply_last_step_only = False
     elif method.startswith("batch_sampling_"):
         num_samples = int(method.rsplit("_", 1)[1])
         cfg.policy._target_ = (
