@@ -24,6 +24,8 @@ EmbodiSteer/
 ├── embodisteer/              # public policies and reusable method components
 ├── diffusion_policy/         # Diffusion Policy model, data and training engine
 ├── umi/                      # real-device and data support
+├── run_sim_pipeline.sh       # simple Conda wrapper for simulation workflows
+├── run_sim_workflow.py       # primary simulation experiment interface
 ├── eval_sim_single_robot.py  # single-robot simulation evaluation
 ├── eval_sim_multi_robots.py  # multi-robot simulation evaluation
 ├── scripts_maniskill/        # simulation helpers and diagnostics
@@ -84,15 +86,22 @@ documented only after their release location is decided.
 
 ## Simulation entry points
 
-The two simulation entry points are `eval_sim_single_robot.py` and
-`eval_sim_multi_robots.py`. Together with `eval_real.py`, they read algorithm
-settings from the same policy YAML. The paper profile is
+`run_sim_pipeline.sh` is the simplest interface for simulation experiments; it
+enters the `embodisteer` Conda environment and forwards all options to
+`run_sim_workflow.py`. The Python workflow
+orchestrates collection, conversion, validation, training, multi-profile
+evaluation and result aggregation from one workflow YAML. The lower-level
+`eval_sim_single_robot.py` and the retained convenience
+`eval_sim_multi_robots.py` remain available for direct checkpoint probes.
+Together with `eval_real.py`, they read algorithm settings from the same policy
+YAML. The paper profile is
 [`configs/policy/embodisteer.yaml`](configs/policy/embodisteer.yaml); the
 Cartesian profile is [`configs/policy/ee.yaml`](configs/policy/ee.yaml).
 
 ```console
 python eval_sim_single_robot.py --help
 python eval_sim_multi_robots.py --help
+./run_sim_pipeline.sh --help
 python eval_real.py --help
 ```
 
@@ -106,13 +115,23 @@ checkpoint.
 For a newly trained checkpoint, preview the complete simulation pipeline with:
 
 ```console
-python scripts_maniskill/run_sim_workflow.py \
+./run_sim_pipeline.sh \
   --config configs/workflows/simulation.yaml --stage all --dry-run
 ```
 
 The workflow separates collection, conversion, dataset validation, training
-and evaluation into resumable stages. Generated data, checkpoints and results
-remain in gitignored or explicitly configured external locations.
+and evaluation into resumable stages. Its eval stage isolates every
+profile/robot pair, writes `run_manifest.yaml`, `results.json`, `results.md`,
+per-robot metrics and episode arrays, and supports `--resume`, `--force`,
+`--checkpoint`, `--output-dir`, `--run-id` and `--robots`. Generated data,
+checkpoints and results remain in gitignored or explicitly configured external
+locations.
+
+For another task, copy a workflow YAML into
+`configs/workflows/<task>/`, change its task, artifact and evaluation fields,
+then pass that file with `--config`; the shell script itself does not need to
+be copied or edited. Set `EMBODISTEER_CONDA_ENV` only when using a Conda
+environment with a different name.
 
 ## Real-world code
 

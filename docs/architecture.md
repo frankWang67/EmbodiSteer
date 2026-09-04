@@ -19,8 +19,7 @@ this stable alias. Its implementation calls the public modules below:
   Jacobian pseudoinverse;
 - `embodisteer.collision`: cuRobo ESDF sign conversion, top-k aggregation and
   safety-margin penalties; and
-- `embodisteer.guidance`: guidance schedule, closed-form CBF-QP and reverse-CBF
-  QCQP solvers.
+- `embodisteer.guidance`: guidance schedules and closed-form CBF-QP solvers.
 
 Rotation and pose-representation helpers remain in `diffusion_policy.common`.
 EmbodiSteer-specific rotation conversions and guided-diffusion loss helpers are

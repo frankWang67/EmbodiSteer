@@ -1,0 +1,15 @@
+schema_version: 1
+
+# TurnFaucet joint-space gradient-guidance ablation.
+policy:
+  inference_space: joint
+  num_inference_steps: 16
+  guidance:
+    method: gd
+    scale: 0.025
+    use_schedule: true
+    safety_margin: 0.07
+    grad_clip: 0.1
+    loss_power: 2.0
+  baseline:
+    method: ""

@@ -1,0 +1,11 @@
+schema_version: 1
+
+# PickPlaceToasterToCounter batch-sampling baseline.
+policy:
+  inference_space: ee
+  num_inference_steps: 16
+  guidance:
+    method: ""
+  baseline:
+    method: batch_sampling
+    batch_sampling_num: 16

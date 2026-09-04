@@ -16,10 +16,8 @@ policy:
     safety_margin: 0.05
     activation_distance: 1.0
     grad_clip: 0.1
-    loss_power: 2.0
     steps_per_denoise: 1
     cbf_lambda: 0.01
-    cbf_reverse_task_threshold: null
     sdf_agg: topk
     sdf_softmax_temp: 20.0
     sdf_topk: 4
@@ -28,24 +26,9 @@ policy:
     use_clean_sample: false
     apply_last_step_only: false
     reuse_jacobian: true
-    # End-effector collision geometry in metres, expressed in the tool frame.
-    eef_corner_points:
-      - [0.01, 0.043, 0.01]
-      - [0.01, -0.043, 0.01]
-      - [-0.01, 0.043, 0.01]
-      - [-0.01, -0.043, 0.01]
-      - [0.01, 0.043, -0.03]
-      - [0.01, -0.043, -0.03]
-      - [-0.01, 0.043, -0.03]
-      - [-0.01, -0.043, -0.03]
 
   baseline:
     method: ""
-    batch_sampling_num: 32
-    jm2d:
-      num_samples: 16
-      temperature: 0.01
-      eta: 1.0
 
   ik:
     jacobian_damping: 0.001

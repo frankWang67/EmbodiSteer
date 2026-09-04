@@ -15,15 +15,15 @@ from embodisteer.evaluation import evaluation_subdir
 SCRIPT_PATH = os.path.join(os.path.dirname(__file__), "eval_sim_single_robot.py")
 
 parser = ArgumentParser(description="Multi-Robot Policy Model Evaluation")
-parser.add_argument("--input", "-i", type=str, required=True, help="Path to checkpoint and experiment results")
-parser.add_argument("--ckpt-filename", "-f", type=str, required=True, help="Checkpoint filename within the experiment folder")
+parser.add_argument("--input", "-i", type=str, required=True, help="Experiment directory containing checkpoints/ and evaluation results")
+parser.add_argument("--ckpt-filename", "-f", type=str, required=True, help="Checkpoint filename within the experiment's checkpoints/ directory")
 parser.add_argument("--env-id", "-e", type=str, required=True, help="Environment ID")
 parser.add_argument("--robot-id", type=str, default="", help="Robot ID to evaluate (from tasks name). If empty, evaluate all robots.")
 parser.add_argument("--sim-backend", "-s", type=str, default="physx_cpu", help="Simulation backend for ManiSkill env")
 parser.add_argument("--control-mode", "-c", type=str, default=None, help="ManiSkill control mode; inferred from the policy config when omitted")
 parser.add_argument("--num-env", "-n", type=int, default=10, help="Number of parallel environments")
 parser.add_argument("--num-eval-episodes", "-ne", type=int, default=100, help="Number of evaluation episodes")
-parser.add_argument("--env-seed", "--env_seed", dest="env_seed", type=int, default=2022, help="Base random seed for ManiSkill evaluation environments")
+parser.add_argument("--env-seed", "--env_seed", dest="env_seed", type=int, default=2022, help="Compatibility metadata; the paper protocol keeps env.reset() unseeded")
 parser.add_argument("--obs-mode", "-o", type=str, default="rgb", help="Observation mode for ManiSkill env")
 parser.add_argument("--render-mode", "-rm", type=str, default="rgb_array", help="Render mode for ManiSkill env")
 parser.add_argument("--steps-per-inference", "-si", type=int, default=8, help="Number of predicted actions to execute per policy call. Use 0 to execute the checkpoint action horizon.")
@@ -57,9 +57,19 @@ args.policy_config = policy_settings["config_path"]
 args.inference_space = policy_settings["inference_space"]
 args.guidance = policy_settings["guidance"]
 args.baseline_method = policy_settings["baseline_method"]
-args.guidance_cbf_reverse_task_threshold = policy_settings[
-    "guidance_cbf_reverse_task_threshold"
-]
+
+if not os.path.isdir(args.input):
+    parser.error("--input must be an experiment directory containing checkpoints/.")
+checkpoint_path = os.path.join(args.input, "checkpoints", args.ckpt_filename)
+if not checkpoint_path.endswith((".ckpt", ".pth")):
+    candidates = (checkpoint_path + ".ckpt", checkpoint_path + ".pth")
+    checkpoint_path = next(
+        (candidate for candidate in candidates if os.path.isfile(candidate)),
+        candidates[0],
+    )
+if not os.path.isfile(checkpoint_path):
+    parser.error(f"Checkpoint does not exist: {checkpoint_path}")
+
 if args.control_mode is None:
     args.control_mode = (
         "pd_joint_pos"
@@ -154,7 +164,7 @@ def build_command(task):
     cmd = [
         sys.executable,
         task["script_path"],
-        "--input", args.input,
+        "--input", checkpoint_path,
         "--ckpt_filename", args.ckpt_filename,
         "--env_id", args.env_id,
         "--robot_uids", task["robot_uid"],
@@ -190,7 +200,6 @@ def get_results_path(task):
         inference_space=args.inference_space,
         guidance=args.guidance,
         baseline_method=args.baseline_method,
-        reverse_cbf_task_threshold=args.guidance_cbf_reverse_task_threshold,
         obstacle=args.obstacle,
         obstacle_observation_noise=args.obstacle_observation_noise,
     )
@@ -218,12 +227,6 @@ def get_markdown_filename():
             f"size{_markdown_float_token(size_std)}_"
             f"rot{_markdown_float_token(rot_std)}"
         )
-    if args.guidance_cbf_reverse_task_threshold is not None:
-        experiment_tags.append(
-            "guidance_cbf_reverse_task_threshold_"
-            f"{_markdown_float_token(args.guidance_cbf_reverse_task_threshold)}"
-        )
-
     if not experiment_tags:
         return "results.md"
     return f"results_{'__'.join(experiment_tags)}.md"

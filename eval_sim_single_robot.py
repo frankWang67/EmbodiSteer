@@ -4,6 +4,8 @@
 # %%
 import sys
 import os
+import json
+from datetime import datetime, timezone
 from functools import partial
 
 ROOT_DIR = os.path.dirname(__file__)
@@ -29,7 +31,7 @@ from embodisteer.runtime_config import (
     joint_policy_overrides,
     load_policy_config,
 )
-from embodisteer.evaluation import evaluation_subdir
+from embodisteer.evaluation import evaluation_subdir, workflow_result_dir
 from diffusion_policy.common.pytorch_util import dict_apply
 from diffusion_policy.workspace.base_workspace import BaseWorkspace
 from umi.real_world.real_inference_util import (
@@ -80,13 +82,24 @@ def _infer_robot_kinematic_args(robot_cfg_name: str):
 @click.command()
 @click.option('--input', '-i', required=True, help='Path to checkpoint and experiment results')
 @click.option('--ckpt_filename', '-f', required=True, help='Checkpoint filename within the experiment folder')
+@click.option(
+    '--output-dir',
+    type=click.Path(file_okay=False),
+    default=None,
+    help='Workflow result root. Omit to preserve the experiment-local legacy layout.',
+)
+@click.option(
+    '--profile-name',
+    default=None,
+    help='Workflow profile name used to isolate results under --output-dir.',
+)
 @click.option('--env_id', '-e', required=True, help='ManiSkill environment id')
 @click.option('--robot_uids', '-r', required=True, help='Robot UIDs in ManiSkill env')
 @click.option('--sim_backend', '-s', default='physx_cpu', help='Simulation backend for ManiSkill env')
 @click.option('--control_mode', '-c', default=None, help='ManiSkill control mode; inferred from the policy config when omitted.')
 @click.option('--num_env', '-n', default=10, type=int, help='Number of parallel environments')
 @click.option('--num_eval_episodes', '-ne', default=100, type=int, help='Number of evaluation episodes')
-@click.option('--env_seed', '--env-seed', default=2022, type=int, help='Base random seed for ManiSkill evaluation environments')
+@click.option('--env_seed', '--env-seed', default=2022, type=int, help='Compatibility metadata; the paper protocol keeps env.reset() unseeded.')
 @click.option('--obs_mode', '-o', default='rgb', help='Observation mode for ManiSkill env')
 @click.option('--render_mode', '-rm', default='all', help='Render mode for ManiSkill env')
 @click.option('--steps_per_inference', '-si', default=0, type=int, help="Number of predicted actions to execute per policy call. Use 0 to execute cfg.task.action_horizon.")
@@ -114,6 +127,8 @@ def _infer_robot_kinematic_args(robot_cfg_name: str):
 def main(
     input,
     ckpt_filename,
+    output_dir,
+    profile_name,
     env_id,
     robot_uids,
     sim_backend,
@@ -129,6 +144,11 @@ def main(
     obstacle_observation_noise,
     policy_config,
 ):
+    started_at = datetime.now(timezone.utc).isoformat()
+    if (output_dir is None) != (profile_name is None):
+        raise click.BadParameter(
+            '--output-dir and --profile-name must be supplied together.'
+        )
     try:
         policy_settings = load_policy_config(policy_config)
     except PolicyConfigError as exc:
@@ -141,14 +161,12 @@ def main(
     jm2d_num_samples = policy_settings['jm2d_num_samples']
     jm2d_temperature = policy_settings['jm2d_temperature']
     jm2d_eta = policy_settings['jm2d_eta']
-    guidance_cbf_reverse_task_threshold = policy_settings['guidance_cbf_reverse_task_threshold']
 
     # Validate method/runtime combinations before touching checkpoint data or
     # creating a simulation environment. Configuration mistakes should remain
     # deterministic and safe even when the checkpoint path is unavailable.
     use_baseline = (baseline_method != '')
     use_guidance = (guidance != '')
-    use_reverse_cbf = (guidance_cbf_reverse_task_threshold is not None)
     is_joint_space = (inference_space == 'joint') or use_baseline
     if control_mode is None:
         control_mode = 'pd_joint_pos' if is_joint_space else 'pd_ee_pose'
@@ -290,14 +308,17 @@ def main(
         inference_space=inference_space,
         guidance=guidance,
         baseline_method=baseline_method,
-        reverse_cbf_task_threshold=guidance_cbf_reverse_task_threshold,
         obstacle=obstacle,
         obstacle_observation_noise=(
             obstacle_observation_noise if obstacle_noise_enabled else None
         ),
     )
 
-    video_dir = os.path.join(exp_path, 'eval_results', robot_uids, eval_subdir, 'videos')
+    if output_dir is not None:
+        log_dir = str(workflow_result_dir(output_dir, profile_name, robot_uids))
+    else:
+        log_dir = os.path.join(exp_path, 'eval_results', robot_uids, eval_subdir)
+    video_dir = os.path.join(log_dir, 'videos')
     os.makedirs(video_dir, exist_ok=True)
     env_kwargs = dict(
         robot_uids=robot_uids,
@@ -338,7 +359,7 @@ def main(
         video_dir=video_dir,
         wrappers=env_wrappers,
         track_collisions=track_collisions,
-        info_on_video=False,
+        info_on_video=True,
     )
 
     # creating model
@@ -411,15 +432,15 @@ def main(
     )
     jm2d_ik_pose_success_rate = None
     jm2d_ik_trajectory_success_rate = None
-    if baseline_method == 'jm2d' and policy._last_jm2d_stats is not None:
+    if baseline_method == 'jm2d' and 'jm2d_ik_pose_success_rate' in eval_metrics:
         jm2d_ik_pose_success_rate = float(
-            policy._last_jm2d_stats['ik_pose_success_rate'].float().mean().item()
+            np.asarray(eval_metrics['jm2d_ik_pose_success_rate']).mean()
         )
         jm2d_ik_trajectory_success_rate = float(
-            policy._last_jm2d_stats['ik_trajectory_success_rate'].float().mean().item()
+            np.asarray(eval_metrics['jm2d_ik_trajectory_success_rate']).mean()
         )
         print(
-            "JM2D IK success (last inference): "
+            "JM2D IK success (all evaluation inferences): "
             f"pose={jm2d_ik_pose_success_rate:.4f}, "
             f"full_trajectory={jm2d_ik_trajectory_success_rate:.4f}"
         )
@@ -477,28 +498,22 @@ def main(
         if non_success_mask.sum() > 0:
             fail_rate_among_non_success = float(fail_once[non_success_mask].mean())
         else:
-            fail_rate_among_non_success = -1.0  # all episodes succeeded
+            fail_rate_among_non_success = None  # undefined when all episodes succeeded
         print(f"fail rate among non-success episodes: {fail_rate_among_non_success}")
     else:
         fail_rate_among_non_success = None
 
-    log_dir = os.path.join(exp_path, 'eval_results', robot_uids, eval_subdir)
     log_filename = os.path.join(log_dir, 'eval_results.txt')
     os.makedirs(os.path.dirname(log_filename), exist_ok=True)
     with open(log_filename, "w") as f:
-        f.write(f"env_seed: {env_seed}\n")
+        f.write("reset_protocol: unseeded_env_reset\n")
+        f.write(f"env_seed_argument: {env_seed}\n")
         if obstacle_noise_enabled:
             pos_std, size_std, rot_std = obstacle_observation_noise
             f.write(f"obstacle_position_noise_std_m: {pos_std}\n")
             f.write(f"obstacle_size_noise_std_m: {size_std}\n")
             f.write(f"obstacle_rotation_noise_std_rad: {rot_std}\n")
             f.write("obstacle_noise_temporal_mode: per_episode\n")
-        if use_reverse_cbf:
-            f.write("guidance_cbf_formulation: reverse\n")
-            f.write(
-                "guidance_cbf_reverse_task_threshold: "
-                f"{guidance_cbf_reverse_task_threshold}\n"
-            )
         f.write(f"success_once_rate: {success_once_rate}\n")
         f.write(f"success_at_end_rate: {success_at_end_rate}\n")
         if jm2d_ik_pose_success_rate is not None:
@@ -540,6 +555,81 @@ def main(
         else:
             f.write("avg_first_success_step: N/A\n")
             f.write("std_first_success_step: N/A\n")
+
+    # Preserve episode-level numeric arrays for statistically correct pooling
+    # and future analysis. The text file above remains backward-compatible with
+    # eval_sim_multi_robots.py.
+    episode_metrics_path = os.path.join(log_dir, 'episode_metrics.npz')
+    np.savez_compressed(
+        episode_metrics_path,
+        **{
+            key: np.asarray(value)
+            for key, value in eval_metrics.items()
+            if np.asarray(value).dtype != object
+        },
+    )
+    structured_metrics = {
+        'success_once_rate': success_once_rate,
+        'success_at_end_rate': success_at_end_rate,
+        'avg_collision_per_episode': avg_collision,
+        'std_collision_per_episode': std_collision,
+        'avg_max_reward_per_episode': avg_max_reward,
+        'std_max_reward_per_episode': std_max_reward,
+        'fail_rate_among_non_success': fail_rate_among_non_success,
+        'fail_rate_all': fail_rate_all,
+        'avg_first_success_step': avg_first_success_step,
+        'std_first_success_step': std_first_success_step,
+        'inference_calls': int(np.asarray(eval_metrics['inference_calls']).sum()),
+        'inference_total_time': float(np.asarray(eval_metrics['inference_total_time']).sum()),
+        'inference_frequency': float(np.asarray(eval_metrics['inference_frequency']).mean()),
+    }
+    if jm2d_ik_pose_success_rate is not None:
+        structured_metrics.update(
+            {
+                'jm2d_ik_pose_success_rate': jm2d_ik_pose_success_rate,
+                'jm2d_ik_trajectory_success_rate': jm2d_ik_trajectory_success_rate,
+                'jm2d_ik_pose_success_rate_sample_count': int(
+                    np.asarray(eval_metrics['jm2d_ik_pose_success_rate_sample_count']).sum()
+                ),
+                'jm2d_ik_trajectory_success_rate_sample_count': int(
+                    np.asarray(eval_metrics['jm2d_ik_trajectory_success_rate_sample_count']).sum()
+                ),
+            }
+        )
+    payload = {
+        'schema_version': 1,
+        'status': 'completed',
+        'started_at': started_at,
+        'finished_at': datetime.now(timezone.utc).isoformat(),
+        'profile_name': profile_name,
+        'policy_config': policy_settings,
+        'checkpoint': {
+            'path': os.path.abspath(ckpt_path),
+        },
+        'evaluation': {
+            'env_id': env_id,
+            'robot_uid': robot_uids,
+            'sim_backend': sim_backend,
+            'control_mode': control_mode,
+            'num_env': num_env,
+            'num_eval_episodes': num_eval_episodes,
+            'reset_protocol': 'unseeded_env_reset',
+            'env_seed_argument': env_seed,
+            'obs_mode': obs_mode,
+            'render_mode': render_mode,
+            'steps_per_inference': steps_per_inference,
+            'max_episode_steps': max_episode_steps,
+            'obstacle': obstacle,
+            'obstacle_observation_noise': obstacle_observation_noise,
+        },
+        'metrics': structured_metrics,
+        'episode_metrics': os.path.basename(episode_metrics_path),
+    }
+    metrics_tmp = os.path.join(log_dir, '.metrics.json.tmp')
+    with open(metrics_tmp, 'w', encoding='utf-8') as handle:
+        json.dump(payload, handle, indent=2, sort_keys=True)
+        handle.write('\n')
+    os.replace(metrics_tmp, os.path.join(log_dir, 'metrics.json'))
 
 # %%
 if __name__ == '__main__':

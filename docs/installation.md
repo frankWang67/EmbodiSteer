@@ -51,6 +51,8 @@ development extra for the checked-in tests, then verify package metadata:
 ```console
 python -m pip install -e '.[dev]'
 python -m pip check
+python -c "import pkg_resources"
+python -m wandb --version
 ```
 
 ## Smoke checks

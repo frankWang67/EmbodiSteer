@@ -14,7 +14,7 @@ access-controlled location and pass their paths explicitly:
 - physical deployment: `eval_real.py --input ... --output ...`
 - data generation/conversion/training: edit
   [`configs/workflows/simulation.yaml`](../configs/workflows/simulation.yaml)
-  and run `python scripts_maniskill/run_sim_workflow.py --stage all`; use
+  and run `./run_sim_pipeline.sh --stage all`; use
   `--stage collect`, `convert`, `validate`, or `train` to resume individual
   stages. Keep generated data and checkpoints under the ignored `data/` and
   `data/outputs/` paths (or configure equivalent external paths).

@@ -12,6 +12,17 @@ the paper method and [`configs/policy/ee.yaml`](../configs/policy/ee.yaml) for
 the Cartesian policy. Relative config paths are resolved from the repository
 root by the shared loader.
 
+Ready-to-run ablation profiles are also provided for joint no-guidance,
+Cartesian and joint GD, post-hoc CBF, batch sampling and JM2D.
+[`configs/workflows/make_iced_coffee/evaluation_all_methods.yaml`](../configs/workflows/make_iced_coffee/evaluation_all_methods.yaml)
+enables six profiles in one profile-by-robot matrix; EE-GD and JM2D are
+included as commented opt-in entries. Reference-evaluation profiles are
+grouped by task under `configs/policy/make_iced_coffee/`,
+`configs/policy/turn_faucet/`, and `configs/policy/place_toast/`; they preserve
+each task's effective guidance and baseline parameters. Files directly under
+`configs/policy/` are generic templates and must not be substituted silently
+in a paper comparison.
+
 ## Configuration boundary
 
 Algorithm settings belong in the policy YAML:
@@ -21,7 +32,7 @@ Algorithm settings belong in the policy YAML:
 - CBF, gradient, or no guidance;
 - guidance scale and schedule shape, safety margin, gradient clamp,
   end-effector collision points, SDF reduction and task weights;
-- standard or reverse CBF settings;
+- CBF settings;
 - Jacobian damping, initialization noise and optional IK refinement; and
 - post-hoc CBF, batch-sampling and JM2D baseline settings.
 
@@ -55,10 +66,9 @@ python eval_real.py --dry_run \
 ```
 
 The shared loader rejects unknown fields and inconsistent combinations. In
-particular, CBF is not accepted for Cartesian inference, reverse CBF requires
-joint-space CBF without a baseline, and a baseline cannot be combined with
-per-step guidance. Real-world evaluation currently rejects baseline profiles;
-baseline evaluation is a simulation-only path.
+particular, CBF is not accepted for Cartesian inference, and a baseline cannot
+be combined with per-step guidance. Real-world evaluation currently rejects
+baseline profiles; baseline evaluation is a simulation-only path.
 
 The checked-in paper profile (joint-space CBF) and Cartesian `gd` guidance use
 the same validated fields. The three launchers and the timing/JM2D diagnostics

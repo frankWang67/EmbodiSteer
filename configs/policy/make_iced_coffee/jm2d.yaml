@@ -1,0 +1,16 @@
+schema_version: 1
+
+# MakeIcedCoffee JM2D profile.
+policy:
+  inference_space: ee
+  num_inference_steps: 16
+  guidance:
+    method: ""
+    safety_margin: 0.07
+    task_rot_weight: 1.0
+  baseline:
+    method: jm2d
+    jm2d:
+      num_samples: 16
+      temperature: 0.01
+      eta: 1.0

@@ -1,0 +1,14 @@
+schema_version: 1
+
+# Joint-Manifold-to-Diffusion baseline with rollout-wide IK diagnostics.
+policy:
+  inference_space: ee
+  num_inference_steps: 16
+  guidance:
+    method: ""
+  baseline:
+    method: jm2d
+    jm2d:
+      num_samples: 16
+      temperature: 0.01
+      eta: 1.0

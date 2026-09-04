@@ -1,0 +1,11 @@
+schema_version: 1
+
+# MakeIcedCoffee batch-sampling baseline used in the reference evaluation.
+policy:
+  inference_space: ee
+  num_inference_steps: 16
+  guidance:
+    method: ""
+  baseline:
+    method: batch_sampling
+    batch_sampling_num: 16

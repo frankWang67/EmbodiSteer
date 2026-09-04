@@ -1,0 +1,10 @@
+schema_version: 1
+
+# Cartesian denoising followed by IK and a one-shot CBF correction.
+policy:
+  inference_space: ee
+  num_inference_steps: 16
+  guidance:
+    method: ""
+  baseline:
+    method: post_hoc_cbf

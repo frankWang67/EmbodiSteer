@@ -36,7 +36,6 @@ DEFAULT_POLICY_CONFIG: dict[str, Any] = {
     "guidance_loss_power": 2.0,
     "guidance_steps_per_denoise": 1,
     "guidance_cbf_lambda": 0.01,
-    "guidance_cbf_reverse_task_threshold": None,
     "guidance_sdf_agg": "topk",
     "guidance_sdf_softmax_temp": 20.0,
     "guidance_sdf_topk": 4,
@@ -93,7 +92,6 @@ JOINT_POLICY_KEYS = (
     "guidance_use_clean_sample",
     "guidance_apply_last_step_only",
     "guidance_cbf_lambda",
-    "guidance_cbf_reverse_task_threshold",
     "guidance_sdf_agg",
     "guidance_sdf_softmax_temp",
     "guidance_sdf_topk",
@@ -298,14 +296,6 @@ def validate_policy_config(values: Mapping[str, Any]) -> None:
         )
     if inference_space == "ee" and guidance == "cbf":
         raise PolicyConfigError("EE-space inference does not support CBF guidance")
-    reverse = values.get("guidance_cbf_reverse_task_threshold")
-    if reverse is not None:
-        if float(reverse) <= 0:
-            raise PolicyConfigError("guidance.cbf_reverse_task_threshold must be positive")
-        if baseline or inference_space != "joint" or guidance != "cbf":
-            raise PolicyConfigError(
-                "reverse CBF requires joint inference with CBF and no baseline"
-            )
     if int(values["batch_sampling_num"]) < 2:
         raise PolicyConfigError("baseline.batch_sampling_num must be at least 2")
     if int(values["jm2d_num_samples"]) < 1:

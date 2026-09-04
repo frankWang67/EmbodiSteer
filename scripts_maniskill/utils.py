@@ -356,6 +356,8 @@ def evaluate(
         eps_count = 0
         inference_call_count = 0
         inference_time_total = 0.0
+        jm2d_stat_sums = defaultdict(float)
+        jm2d_stat_counts = defaultdict(int)
         num_envs = eval_envs.num_envs
         # first_success_step[i] = step at which env i first succeeded; -1 = not yet
         first_success_step = np.full(num_envs, -1, dtype=np.int64)
@@ -396,6 +398,20 @@ def evaluate(
                 obstacle_info=obstacle_info, 
                 current_joint_angles=current_joint_angles,
             )
+            # JM2D exposes diagnostics for the most recent inference. Accumulate
+            # them here so the public evaluator reports the entire rollout,
+            # rather than only the final policy call.
+            jm2d_stats = getattr(policy, "_last_jm2d_stats", None)
+            if jm2d_stats:
+                for key in (
+                    "ik_pose_success_rate",
+                    "ik_trajectory_success_rate",
+                ):
+                    value = jm2d_stats.get(key)
+                    if value is not None:
+                        value = value.detach().float()
+                        jm2d_stat_sums[key] += float(value.sum().item())
+                        jm2d_stat_counts[key] += int(value.numel())
             # ======= BEGIN ADDED: MEASURE MODEL INFERENCE =======
             dt = time.perf_counter() - t0
             inference_call_count += 1
@@ -456,6 +472,12 @@ def evaluate(
     eval_metrics['inference_calls'] = np.array([inference_call_count])
     eval_metrics['inference_total_time'] = np.array([inference_time_total])
     eval_metrics['inference_frequency'] = np.array([frequency])
+    for key, total in jm2d_stat_sums.items():
+        count = jm2d_stat_counts[key]
+        eval_metrics[f"jm2d_{key}"] = np.array(
+            [total / count if count else float("nan")], dtype=np.float64
+        )
+        eval_metrics[f"jm2d_{key}_sample_count"] = np.array([count])
     print(f"Inference calls: {inference_call_count}, total time: {inference_time_total:.4f}s, frequency: {frequency:.2f} calls/s")
     # ======== END ADDED: INFERENCE STATISTICS (OUTPUT) ========
 

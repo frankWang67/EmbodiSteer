@@ -1,0 +1,40 @@
+schema_version: 1
+
+# Eval-only PlaceToast template enabling six commonly used profiles. EE-GD and
+# JM2D are retained below as commented opt-in comparisons.
+task:
+  env_id: PickPlaceToasterToCounter-v1
+
+evaluation:
+  checkpoint: data/outputs/place_toast_full/checkpoints/latest.ckpt
+  output_dir: data/outputs/evaluation
+  run_id: place_toast_all_methods
+  profiles:
+    ee: configs/policy/ee.yaml
+    # ee_gd: configs/policy/ee_gd.yaml
+    joint_no_guidance: configs/policy/joint_no_guidance.yaml
+    joint_gd: configs/policy/place_toast/joint_gd.yaml
+    embodisteer: configs/policy/place_toast/embodisteer.yaml
+    post_hoc_cbf: configs/policy/place_toast/post_hoc_cbf.yaml
+    batch_sampling: configs/policy/place_toast/batch_sampling.yaml
+    # jm2d: configs/policy/jm2d.yaml
+  robots:
+    - ur5_robotiq_wristcam
+    - panda_robotiq_wristcam
+    - xarm6_robotiq_wristcam
+    - xarm7_robotiq_wristcam
+    - iiwa7_robotiq_wristcam
+    - gen3_6dof_robotiq_wristcam
+    - gen3_7dof_robotiq_wristcam
+    - rizon4_robotiq_wristcam
+    - sawyer_robotiq_wristcam
+  sim_backend: physx_cpu
+  num_env: 10
+  num_eval_episodes: 100
+  env_seed: 2022
+  obs_mode: rgb
+  render_mode: all
+  steps_per_inference: 0
+  max_episode_steps: 500
+  obstacle: true
+  continue_on_error: true

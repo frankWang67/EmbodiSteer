@@ -18,8 +18,9 @@ paths:
   train_output_dir: data/outputs/pickplace_local
 
 collection:
-  # multi_robot_data_collection.py collects this total across its five robots;
-  # it must be divisible by five.
+  # The total is divided equally across the selected collection robots.
+  robot_uids:
+    - floating_robotiq_2f_85_gripper_wristcam
   total_trajectories: 100
   obs_mode: rgb
   control_mode: pd_ee_pose
@@ -27,7 +28,6 @@ collection:
   sim_backend_replay: physx_cpu
   num_procs: 1
   save_video: false
-  gpu_index: 0
 
 conversion:
   camera_name: hand_camera
@@ -37,14 +37,14 @@ training:
   config_dir: configs/simulation/hydra
   config_name: train_diffusion_unet_timm_maniskill_workspace
   device: cuda:0
-  gpu_index: 0
   logging_mode: offline
   overrides:
     training.num_epochs: 120
     training.resume: false
 
 evaluation:
-  gpu_index: 0
+  output_dir: data/outputs/evaluation
+  run_id: pickplace_local
   profiles:
     ee: configs/policy/ee.yaml
     embodisteer: configs/policy/embodisteer.yaml

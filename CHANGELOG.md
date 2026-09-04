@@ -13,7 +13,7 @@ pre-publication phase, so no versioned release has been tagged yet.
   the main/fork/optional dependency boundary.
 - Isolated the EmbodiSteer implementation under `embodisteer/` while keeping
   the `diffusion_policy/` API stable for checkpoint compatibility.
-- Added shared kinematics, cuRobo SDF reductions, CBF-QP/reverse-CBF guidance,
+- Added shared kinematics, cuRobo SDF reductions, CBF-QP guidance,
   and public simulation/real-world policy entry points.
 - Pinned the reviewed ManiSkill and cuRobo fork revisions in
   `third_party/manifest.yaml`.

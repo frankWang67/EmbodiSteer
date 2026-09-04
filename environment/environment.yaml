@@ -16,6 +16,9 @@ dependencies:
   - pip:
     - torch==2.7.1+cu128 --index-url https://download.pytorch.org/whl/cu128
     - torchvision==0.22.1+cu128 --index-url https://download.pytorch.org/whl/cu128
+    # W&B 0.15.8 starts a service process that imports pkg_resources, which
+    # was removed from newer setuptools releases.
+    - setuptools==80.10.2
     - scikit-video==1.1.11
     - lmdb==1.4.1
     - timm==0.9.7
@@ -70,7 +73,7 @@ dependencies:
     - huggingface_hub==0.25.2
     - pytorch-kinematics==0.10.0
     # Runtime dependencies declared by the pinned ManiSkill commit
-    # d9283787fcdc6416180982468e2bd173087b46dd.
+    # 856cebe6dabedb58032e82796c09d8a5acc49c68.
     - gymnasium==0.29.1
     - dacite==1.9.2
     - h5py==3.15.1

@@ -1,0 +1,15 @@
+schema_version: 1
+
+# TurnFaucet post-hoc CBF baseline.
+policy:
+  inference_space: ee
+  num_inference_steps: 16
+  guidance:
+    method: ""
+    scale: 1.0
+    safety_margin: 0.07
+    grad_clip: 0.1
+    task_pos_weight: 1.0
+    task_rot_weight: 1.0
+  baseline:
+    method: post_hoc_cbf

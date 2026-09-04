@@ -20,6 +20,8 @@ def test_release_tree_is_self_contained_at_top_level():
         "third_party/assets.yaml",
         "THIRD_PARTY_NOTICES.md",
         "docs/method.md",
+        "run_sim_pipeline.sh",
+        "run_sim_workflow.py",
         "eval_sim_single_robot.py",
         "eval_sim_multi_robots.py",
         "pyproject.toml",

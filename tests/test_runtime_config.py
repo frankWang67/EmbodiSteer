@@ -2,6 +2,8 @@ from copy import deepcopy
 from pathlib import Path
 import tempfile
 
+import yaml
+
 from embodisteer.runtime_config import (
     DEFAULT_POLICY_CONFIG,
     PolicyConfigError,
@@ -25,6 +27,53 @@ def test_checked_in_policy_profiles_load():
     assert (ee["inference_space"], ee["guidance"]) == ("ee", "")
     assert embodisteer["num_inference_steps"] == 16
     assert ee["num_inference_steps"] == 16
+
+
+def test_checked_in_baseline_and_ablation_profiles_load():
+    expected = {
+        "joint_no_guidance.yaml": ("joint", "", ""),
+        "joint_gd.yaml": ("joint", "gd", ""),
+        "ee_gd.yaml": ("ee", "gd", ""),
+        "post_hoc_cbf.yaml": ("ee", "", "post_hoc_cbf"),
+        "batch_sampling.yaml": ("ee", "", "batch_sampling"),
+        "jm2d.yaml": ("ee", "", "jm2d"),
+    }
+    for filename, methods in expected.items():
+        config = load_policy_config(ROOT / "configs/policy" / filename)
+        assert (
+            config["inference_space"],
+            config["guidance"],
+            config["baseline_method"],
+        ) == methods
+
+
+def test_checked_in_profiles_scope_method_specific_fields():
+    for path in sorted((ROOT / "configs/policy").glob("**/*.yaml")):
+        if path.name.endswith(".local.yaml"):
+            continue
+        policy = yaml.safe_load(path.read_text(encoding="utf-8"))["policy"]
+        guidance = policy.get("guidance", {})
+        baseline = policy.get("baseline", {})
+        inference_space = policy["inference_space"]
+        guidance_method = guidance.get("method", "")
+        baseline_method = baseline.get("method", "")
+
+        if guidance_method == "cbf":
+            assert "eef_corner_points" not in guidance, path
+            assert "loss_power" not in guidance, path
+        if inference_space == "ee" and guidance_method == "gd":
+            assert "eef_corner_points" in guidance, path
+        if inference_space == "joint" and guidance_method == "gd":
+            assert "loss_power" in guidance, path
+            assert "task_pos_weight" not in guidance, path
+            assert "task_rot_weight" not in guidance, path
+        if baseline_method == "":
+            assert set(baseline) == {"method"}, path
+        elif baseline_method == "batch_sampling":
+            assert set(guidance) == {"method"}, path
+            assert set(baseline) == {"method", "batch_sampling_num"}, path
+        elif baseline_method == "jm2d":
+            assert "jm2d" in baseline, path
 
 
 def test_joint_overrides_include_configured_guidance_and_ik_values():

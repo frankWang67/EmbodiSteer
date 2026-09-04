@@ -2,7 +2,7 @@ schema_version: 1
 project: EmbodiSteer
 status: "pinned-dependencies"
 notes:
-  - "ManiSkill is pinned to commit d9283787fcdc6416180982468e2bd173087b46dd."
+  - "ManiSkill is pinned to commit 856cebe6dabedb58032e82796c09d8a5acc49c68."
   - "Checkpoint and training-data artifacts are described separately in artifacts/manifest.yaml."
 repositories:
   maniskill:
@@ -10,8 +10,8 @@ repositories:
     upstream_url: https://github.com/mani-skill/ManiSkill.git
     fork_url: https://github.com/frankWang67/ManiSkill.git
     base_commit: 58aa10fd940b80c24bed979202e49abffb3c1a09
-    commit: d9283787fcdc6416180982468e2bd173087b46dd
-    parent_commit: 58aa10fd940b80c24bed979202e49abffb3c1a09
+    commit: 856cebe6dabedb58032e82796c09d8a5acc49c68
+    parent_commit: d9283787fcdc6416180982468e2bd173087b46dd
     status: pinned_release_commit
     code_license: Apache-2.0
     asset_license: CC-BY-NC-4.0

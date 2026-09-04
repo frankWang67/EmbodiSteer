@@ -1,0 +1,15 @@
+schema_version: 1
+
+# PickPlaceToasterToCounter joint-space gradient-guidance baseline.
+policy:
+  inference_space: joint
+  num_inference_steps: 16
+  guidance:
+    method: gd
+    scale: 1.0
+    use_schedule: true
+    safety_margin: 0.05
+    grad_clip: 0.1
+    loss_power: 2.0
+  baseline:
+    method: ""

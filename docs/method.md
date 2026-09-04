@@ -85,14 +85,7 @@ Because each trajectory state has one aggregated collision inequality, the
 minimum-task-disturbance update has a closed form. Position and rotation can
 receive different weights through `W`; regularization keeps `H` invertible.
 
-Setting `guidance_cbf_reverse_task_threshold` selects the reverse-CBF QCQP:
-
-```text
-minimize    1/2 relu(r - a^T Delta q)^2
-subject to  sqrt(Delta q^T H Delta q) <= rho,
-```
-
-where `rho` caps task-space disturbance. Gradient guidance instead minimizes
+Gradient guidance instead minimizes
 the hinge penalty `relu(d_curobo + m)^p` directly in joint space. Both modes
 can apply multiple corrections per denoising step, clamp joint corrections,
 operate on a predicted clean sample, or run only at the last step.

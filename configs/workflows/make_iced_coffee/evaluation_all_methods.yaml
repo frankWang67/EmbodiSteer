@@ -1,0 +1,42 @@
+schema_version: 1
+
+# Eval-only template enabling six commonly used profiles. EE-GD and JM2D are
+# retained below as commented opt-in comparisons because of their higher cost.
+task:
+  env_id: MakeIcedCoffee-v1
+
+evaluation:
+  checkpoint: data/outputs/coffee_full/checkpoints/latest.ckpt
+  output_dir: data/outputs/evaluation
+  run_id: coffee_all_methods
+  profiles:
+    ee: configs/policy/ee.yaml
+    # ee_gd: configs/policy/make_iced_coffee/ee_gd.yaml
+    joint_no_guidance: configs/policy/joint_no_guidance.yaml
+    joint_gd: configs/policy/make_iced_coffee/joint_gd.yaml
+    embodisteer: configs/policy/make_iced_coffee/embodisteer.yaml
+    post_hoc_cbf: configs/policy/make_iced_coffee/post_hoc_cbf.yaml
+    batch_sampling: configs/policy/make_iced_coffee/batch_sampling.yaml
+    # Mapping form allows runtime overrides for a single expensive profile.
+    # jm2d:
+    #   policy_config: configs/policy/make_iced_coffee/jm2d.yaml
+  robots:
+    - ur5_robotiq_wristcam
+    - panda_robotiq_wristcam
+    - xarm6_robotiq_wristcam
+    - xarm7_robotiq_wristcam
+    - iiwa7_robotiq_wristcam
+    - gen3_6dof_robotiq_wristcam
+    - gen3_7dof_robotiq_wristcam
+    - rizon4_robotiq_wristcam
+    - sawyer_robotiq_wristcam
+  sim_backend: physx_cpu
+  num_env: 10
+  num_eval_episodes: 100
+  env_seed: 2022
+  obs_mode: rgb
+  render_mode: all
+  steps_per_inference: 0
+  max_episode_steps: 500
+  obstacle: true
+  continue_on_error: true

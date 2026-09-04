@@ -1,0 +1,43 @@
+schema_version: 1
+
+# MakeIcedCoffee EmbodiSteer profile. Operational settings such as the checkpoint,
+# robot UID and environment ID remain in the workflow/evaluation command.
+policy:
+  inference_space: joint
+  num_inference_steps: 16
+
+  guidance:
+    method: cbf
+    scale: 1.0
+    use_schedule: true
+    schedule_midpoint: 0.7
+    schedule_steepness: 50.0
+    safety_margin: 0.07
+    activation_distance: 1.0
+    grad_clip: 0.1
+    steps_per_denoise: 1
+    cbf_lambda: 0.01
+    sdf_agg: topk
+    sdf_softmax_temp: 20.0
+    sdf_topk: 4
+    task_pos_weight: 1.0
+    task_rot_weight: 1.0
+    use_clean_sample: false
+    apply_last_step_only: false
+    reuse_jacobian: true
+
+  baseline:
+    method: ""
+
+  ik:
+    jacobian_damping: 0.001
+    refine_each_step: false
+    refine_last_step: false
+    position_threshold: 0.0005
+    rotation_threshold: 0.005
+    num_seeds: 1
+    init_noise_scale: 0.2
+    noise_init_mode: jacobian_projected
+    jac_noise_alpha: 0.1
+    max_dq_per_step: 0.5
+    cartesian_delta_mode: geometric

@@ -22,6 +22,7 @@ __pycache__/
 
 # Internal planning and audit notes are kept locally and are not release files.
 .codex/
+.agents/
 
 # Device/site configuration should be supplied outside the release tree
 *.local.yaml

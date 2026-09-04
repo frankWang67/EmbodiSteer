@@ -1,0 +1,11 @@
+schema_version: 1
+
+# Joint-space gradient-guidance ablation.
+policy:
+  inference_space: joint
+  num_inference_steps: 16
+  guidance:
+    method: gd
+    loss_power: 2.0
+  baseline:
+    method: ""

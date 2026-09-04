@@ -1,0 +1,71 @@
+schema_version: 1
+
+# Complete PlaceToast run:
+# 200 demos -> UMI conversion -> 120-epoch training ->
+# EmbodiSteer evaluation on all nine wrist-camera robots.
+task:
+  name: PickPlaceToasterToCounter
+  env_id: PickPlaceToasterToCounter-v1
+  env_name: PickPlaceToasterToCounter
+
+paths:
+  maniskill_root: third_party/src/maniskill
+  data_root: data
+  h5_filename: merged_data_place_toast_200.h5
+  dataset_filename: ManiSkill_PickPlaceToasterToCounter_200.zarr.zip
+  train_output_dir: data/outputs/place_toast_full
+
+collection:
+  # Demos collected with 5 robots perform better than demos collected with the floating gripper alone in this task.
+  # Probably due to some problems with motion planning, controllers or scene setup; PRs are welcome to fix this.
+  robot_uids:
+    - panda_robotiq_wristcam
+    - xarm6_robotiq_wristcam
+    - xarm7_robotiq_wristcam
+    - ur5_robotiq_wristcam
+    - floating_robotiq_2f_85_gripper_wristcam
+  total_trajectories: 200
+  obs_mode: rgb
+  control_mode: pd_ee_pose
+  sim_backend_gen: physx_cpu
+  sim_backend_replay: physx_cpu
+  num_procs: 10
+  save_video: false
+
+conversion:
+  camera_name: hand_camera
+  image_size: 224
+
+training:
+  config_dir: configs/simulation/hydra
+  config_name: train_diffusion_unet_timm_maniskill_workspace
+  device: cuda:0
+  logging_mode: offline
+  overrides:
+    training.num_epochs: 120
+    training.resume: false
+
+evaluation:
+  output_dir: data/outputs/evaluation
+  run_id: place_toast_full
+  profiles:
+    embodisteer: configs/policy/place_toast/embodisteer.yaml
+  robots:
+    - ur5_robotiq_wristcam
+    - panda_robotiq_wristcam
+    - xarm6_robotiq_wristcam
+    - xarm7_robotiq_wristcam
+    - iiwa7_robotiq_wristcam
+    - gen3_6dof_robotiq_wristcam
+    - gen3_7dof_robotiq_wristcam
+    - rizon4_robotiq_wristcam
+    - sawyer_robotiq_wristcam
+  sim_backend: physx_cpu
+  num_env: 10
+  num_eval_episodes: 100
+  env_seed: 2022
+  obs_mode: rgb
+  render_mode: all
+  steps_per_inference: 0
+  max_episode_steps: 500
+  obstacle: true

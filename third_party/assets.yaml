@@ -63,7 +63,7 @@ asset_groups:
   maniskill_assets:
     path: third_party/src/maniskill/
     source_repository: https://github.com/frankWang67/ManiSkill.git
-    source_revision: d9283787fcdc6416180982468e2bd173087b46dd
+    source_revision: 856cebe6dabedb58032e82796c09d8a5acc49c68
     license: CC-BY-NC-4.0 (assets; code is Apache-2.0)
     license_evidence:
       - third_party/manifest.yaml

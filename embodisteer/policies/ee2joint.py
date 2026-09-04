@@ -48,7 +48,6 @@ from embodisteer.kinematics import (
 from embodisteer.guidance import (
     guidance_scale_at,
     solve_batched_cbf_qp,
-    solve_batched_reverse_cbf_qcqp,
 )
 
 
@@ -95,7 +94,6 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
         guidance_steps_per_denoise: int = 1,
         guidance_use_clean_sample: bool = False,
         guidance_cbf_lambda: float = 0.01,
-        guidance_cbf_reverse_task_threshold: Optional[float] = None,
         guidance_sdf_agg: str = "topk",
         guidance_sdf_softmax_temp: float = 20.0,
         guidance_sdf_topk: int = 4,
@@ -156,21 +154,6 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
         self.guidance_steps_per_denoise = int(max(guidance_steps_per_denoise, 1))
         self.guidance_use_clean_sample = bool(guidance_use_clean_sample)
         self.guidance_cbf_lambda = float(guidance_cbf_lambda)
-        if guidance_cbf_reverse_task_threshold is None:
-            self.guidance_cbf_reverse_task_threshold = None
-        else:
-            self.guidance_cbf_reverse_task_threshold = float(
-                guidance_cbf_reverse_task_threshold
-            )
-            if self.guidance_cbf_reverse_task_threshold <= 0.0:
-                raise ValueError(
-                    "guidance_cbf_reverse_task_threshold must be positive."
-                )
-            if self.guidance_method != "cbf":
-                raise ValueError(
-                    "guidance_cbf_reverse_task_threshold requires guidance_method='cbf'."
-                )
-
         guidance_sdf_agg = str(guidance_sdf_agg).lower()
         if guidance_sdf_agg == "softmax":
             guidance_sdf_agg = "topk"
@@ -381,22 +364,13 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
         dummy_grad_h = torch.randn(bsz, horizon, robot_dof, device=device, dtype=torch.float32)
         dummy_h = torch.randn(bsz, horizon, device=device, dtype=torch.float32)
 
-        if self.guidance_cbf_reverse_task_threshold is None:
-            def _cbf_qp_wrapper(jac, grad_h, h_value, constraint_scale):
-                return self._solve_batched_cbf_qp(
-                    jac_pos=jac,
-                    grad_h=grad_h,
-                    h_value=h_value,
-                    constraint_scale=constraint_scale,
-                )
-        else:
-            def _cbf_qp_wrapper(jac, grad_h, h_value, constraint_scale):
-                return self._solve_batched_reverse_cbf_qcqp(
-                    jac_pos=jac,
-                    grad_h=grad_h,
-                    h_value=h_value,
-                    constraint_scale=constraint_scale,
-                )
+        def _cbf_qp_wrapper(jac, grad_h, h_value, constraint_scale):
+            return self._solve_batched_cbf_qp(
+                jac_pos=jac,
+                grad_h=grad_h,
+                h_value=h_value,
+                constraint_scale=constraint_scale,
+            )
 
         compiled_qp = torch.compile(
             _cbf_qp_wrapper, fullgraph=True, mode="reduce-overhead",
@@ -798,37 +772,6 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
             position_weight=self.guidance_task_pos_weight,
             rotation_weight=self.guidance_task_rot_weight,
             regularization=self.guidance_cbf_lambda,
-        )
-
-    def _solve_batched_reverse_cbf_qcqp(
-        self, jac_pos: torch.Tensor, grad_h: torch.Tensor,
-        h_value: torch.Tensor, constraint_scale: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Solve the reviewer-requested reverse CBF problem in closed form.
-
-        For each batch/time element, let a = grad_h and
-        H = J_task^T W J_task + lambda I. The convex problem is
-
-          min 1/2 * relu(r - a^T dq)^2
-          s.t. sqrt(dq^T H dq) <= rho,
-
-        where r = scale * relu(d_safe - h) and rho is
-        guidance_cbf_reverse_task_threshold. Among the zero-collision-cost
-        solutions, the closed form selects the minimum-task-disturbance one.
-        """
-        return solve_batched_reverse_cbf_qcqp(
-            jac_pos,
-            grad_h,
-            h_value,
-            constraint_scale,
-            arm_dof=self.arm_dof,
-            safety_margin=self.guidance_safety_margin,
-            position_weight=self.guidance_task_pos_weight,
-            rotation_weight=self.guidance_task_rot_weight,
-            regularization=self.guidance_cbf_lambda,
-            task_threshold=self.guidance_cbf_reverse_task_threshold,
-            joint_clip=self.guidance_grad_clip,
         )
 
     def _compute_collision_grad(self, q_arm: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:

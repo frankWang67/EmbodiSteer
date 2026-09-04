@@ -1,9 +1,12 @@
 # Simulation
 
-The simulation launchers are
-[`eval_sim_single_robot.py`](../eval_sim_single_robot.py) and
-[`eval_sim_multi_robots.py`](../eval_sim_multi_robots.py). They use the same
-public policy aliases and algorithm config as the physical path:
+The primary simulation interface is the thin
+[`run_sim_pipeline.sh`](../run_sim_pipeline.sh) wrapper around
+[`run_sim_workflow.py`](../run_sim_workflow.py). The direct
+[`eval_sim_single_robot.py`](../eval_sim_single_robot.py) and retained
+[`eval_sim_multi_robots.py`](../eval_sim_multi_robots.py) launchers are useful
+for focused checkpoint probes. They use the same public policy aliases and
+algorithm config as the physical path:
 
 ```python
 from embodisteer.policies import EmbodiSteerJointPolicy
@@ -43,7 +46,7 @@ Data generation, conversion, training and simulation evaluation are exposed as
 independent stages of one config-driven launcher:
 
 ```console
-python scripts_maniskill/run_sim_workflow.py \
+./run_sim_pipeline.sh \
   --config configs/workflows/simulation.yaml --stage all --dry-run
 ```
 
@@ -53,9 +56,74 @@ dataset under ignored `data/` paths, trains into ignored `data/outputs/`, and
 evaluates the resulting `checkpoints/latest.ckpt`. Run a single stage with
 `--stage collect|convert|validate|train|eval` when resuming after an
 interruption. Edit the YAML to choose the task, collection count, GPU,
-training overrides, policy profiles and robot list; the checked-in workflow
-evaluates both the EE baseline and EmbodiSteer. Do not put datasets or
-checkpoints under tracked source directories.
+collection robot UIDs, training overrides, policy profiles and evaluation
+robot list; the checked-in workflow evaluates both the EE baseline and
+EmbodiSteer. Do not put datasets or checkpoints under tracked source
+directories.
+
+To add a task, place its workflow under `configs/workflows/<task>/` and select
+it with `--config`. Task names, environment IDs, artifact paths, collection
+settings, training overrides, policy profiles and robots all belong in that
+YAML; `run_sim_pipeline.sh` remains unchanged. It uses the `embodisteer` Conda
+environment by default, which can be overridden with
+`EMBODISTEER_CONDA_ENV=<name>`.
+
+Complete pipeline and multi-method evaluation configs are provided for all
+three paper tasks:
+
+- `configs/workflows/place_toast/`
+- `configs/workflows/turn_faucet/`
+- `configs/workflows/make_iced_coffee/`
+
+Each directory contains `full_pipeline.yaml` and
+`evaluation_all_methods.yaml`. The former collects 200 demonstrations, trains
+for 120 epochs and evaluates EmbodiSteer on nine robots. The latter enables six
+methods by default: EE, joint no-guidance, joint GD, EmbodiSteer, post-hoc CBF
+and batch sampling. EE-GD and JM2D remain as commented opt-in profiles because
+they are substantially more expensive. Replace the template checkpoint path
+before a real evaluation.
+
+The eval stage accepts a trained workflow checkpoint by default, or an
+explicit external checkpoint and output location:
+
+```console
+./run_sim_pipeline.sh \
+  --config configs/workflows/make_iced_coffee/evaluation_all_methods.yaml \
+  --stage eval \
+  --checkpoint /path/to/model.ckpt \
+  --output-dir data/outputs/evaluation \
+  --run-id coffee_baselines \
+  --robots panda_robotiq_wristcam ur5_robotiq_wristcam
+```
+
+The compact eval-only template runs EE, joint no-guidance, joint GD,
+EmbodiSteer, post-hoc CBF and batch sampling. Uncomment EE-GD or JM2D when
+those optional comparisons are needed. A profile can be either a policy YAML
+path or a mapping with `policy_config` plus per-profile runtime overrides such
+as `robots`, `obstacle`, `control_mode`, render mode and episode count. All
+enabled profiles are parsed and validated before the first GPU job.
+
+Results are isolated as
+`<output_dir>/<run_id>/profiles/<profile>/<robot>/`. Each robot stores the
+legacy `eval_results.txt`, structured `metrics.json`, episode-level
+`episode_metrics.npz` and videos. The run directory additionally contains a
+configuration manifest (`run_manifest.yaml`), `results.json` and `results.md`
+with robot macro averages and correctly pooled episode statistics. JM2D IK
+rates are accumulated over all evaluation inference calls when that optional
+profile is enabled.
+
+Use `--resume` to skip completed profile/robot jobs or `--force` to rerun them
+in place. A failed job is recorded and, by default, the remaining matrix is
+still evaluated; set `evaluation.continue_on_error: false` to stop at the first
+failure. Because the paper protocol uses unseeded `env.reset()`, manifests label
+the reset protocol explicitly; `env_seed` is retained only as an operational
+compatibility argument.
+
+Select physical GPUs through `CUDA_VISIBLE_DEVICES`; the workflow passes the
+environment through unchanged to collection, training and evaluation. For
+example, prefix a command with `CUDA_VISIBLE_DEVICES=3`. The training config
+remains `device: cuda:0` because CUDA exposes the first selected physical GPU
+to the process as logical device zero.
 
 The `validate` stage checks the converter's raw 7D action representation
 (position, axis-angle, gripper), which `UmiDataset` deterministically lifts to

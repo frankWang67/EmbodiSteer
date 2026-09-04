@@ -1,0 +1,21 @@
+schema_version: 1
+
+# MakeIcedCoffee Cartesian gradient-guidance ablation.
+policy:
+  inference_space: ee
+  num_inference_steps: 16
+  guidance:
+    method: gd
+    safety_margin: 0.07
+    # End-effector collision geometry in metres, expressed in the tool frame.
+    eef_corner_points:
+      - [0.01, 0.043, 0.01]
+      - [0.01, -0.043, 0.01]
+      - [-0.01, 0.043, 0.01]
+      - [-0.01, -0.043, 0.01]
+      - [0.01, 0.043, -0.03]
+      - [0.01, -0.043, -0.03]
+      - [-0.01, 0.043, -0.03]
+      - [-0.01, -0.043, -0.03]
+  baseline:
+    method: ""

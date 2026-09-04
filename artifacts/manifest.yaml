@@ -17,7 +17,6 @@ required_fields_when_published:
   - type
   - task
   - revision
-  - sha256
   - size_bytes
   - url
   - license

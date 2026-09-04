@@ -5,7 +5,6 @@ import argparse
 import copy
 import datetime as dt
 import gc
-import hashlib
 import json
 import os
 import re
@@ -192,17 +191,6 @@ def infer_robot_kinematic_args(robot_cfg_name):
     except Exception:
         pass
     return urdf_path, ee_link_name, arm_dof
-
-
-def sha256_file(path):
-    digest = hashlib.sha256()
-    with open(path, "rb") as f:
-        while True:
-            block = f.read(16 * 1024 * 1024)
-            if not block:
-                break
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def percentile(values, q):
@@ -571,7 +559,6 @@ def main():
         "timestamp": dt.datetime.now().astimezone().isoformat(),
         "checkpoint": str(checkpoint),
         "checkpoint_size_bytes": checkpoint.stat().st_size,
-        "checkpoint_sha256": sha256_file(checkpoint),
         "environment": "PickPlaceToasterToCounter-v1",
         "robot": "panda_robotiq_wristcam",
         "batch_size": 1,
@@ -579,11 +566,6 @@ def main():
         "benchmark_input_source": benchmark_input_source,
         "benchmark_input_path": (
             str(benchmark_input_path) if benchmark_input_path is not None else None
-        ),
-        "benchmark_input_sha256": (
-            sha256_file(benchmark_input_path)
-            if benchmark_input_path is not None
-            else None
         ),
         "simulation_created_in_benchmark_process": (
             simulation_created_in_benchmark_process
@@ -620,9 +602,7 @@ def main():
             "embodisteer": {
                 "space": "joint",
                 "guidance": "cbf",
-                "policy_class": (
-                    "DiffusionUnetTimmPolicyJointSpaceWithGuidance"
-                ),
+                "policy_class": "EmbodiSteerJointPolicy",
                 "guidance_scale": policy_settings["guidance_scale"],
                 "guidance_safety_margin": policy_settings["guidance_safety_margin"],
                 "guidance_activation_distance": policy_settings["guidance_activation_distance"],
