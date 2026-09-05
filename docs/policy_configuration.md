@@ -25,6 +25,21 @@ in a paper comparison.
 
 ## Configuration boundary
 
+`embodisteer.runtime_config.policy_target` resolves the concrete Hydra class
+from these fields; no class name is needed in the policy YAML:
+
+| selection | class |
+| --- | --- |
+| joint + CBF | `embodisteer.policies.embodisteer.DiffusionUnetTimmPolicyEmbodiSteer` |
+| joint + GD or no guidance | `embodisteer.policies.ee2joint.DiffusionUnetTimmPolicyJointSpace` |
+| Cartesian (no baseline) | `embodisteer.policies.ee_space.EmbodiSteerEESpacePolicy` |
+| post-hoc CBF / batch sampling | `embodisteer.policies.baselines.DiffusionUnetTimmPolicyBaseline` |
+| JM2D | `embodisteer.policies.jm2d.DiffusionUnetTimmPolicyJM2D` |
+
+GD is a comparison method, not a mode of the paper class. The two joint
+constructors reject the other method's guidance selection. Existing YAML
+profiles need no field or hyperparameter changes.
+
 Algorithm settings belong in the policy YAML:
 
 - Cartesian or joint inference;
@@ -72,8 +87,12 @@ baseline profiles; baseline evaluation is a simulation-only path.
 
 The checked-in paper profile (joint-space CBF) and Cartesian `gd` guidance use
 the same validated fields. The three launchers and the timing/JM2D diagnostics
-all read `num_inference_steps` and guidance hyperparameters from the selected
-policy YAML; they do not overwrite them with launcher-specific defaults.
+all read `num_inference_steps` and numeric guidance hyperparameters from the
+selected policy YAML. The speed benchmark's named methods select their own
+algorithm through the same router: `embodisteer` always means CBF,
+`joint_space_no_guidance` disables guidance, and baseline labels select their
+respective baseline. Thus a benchmark cannot silently label a GD run as the
+paper method.
 
 To create an ablation, copy a checked-in profile, change the relevant YAML
 fields, and preserve the exact file with the experiment results. This records

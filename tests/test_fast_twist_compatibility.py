@@ -5,7 +5,7 @@ import torch
 
 from embodisteer.kinematics import twist6_from_matrices, twist6_from_matrices_fast
 from embodisteer.kinematics.rotation import axis_angle_to_matrix
-from embodisteer.policies.ee2joint import EmbodiSteerJointPolicy
+from embodisteer.policies import EmbodiSteerJointPolicy
 
 
 @pytest.mark.parametrize("use_policy_compile", [False, True])

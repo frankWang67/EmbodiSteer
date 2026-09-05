@@ -342,6 +342,27 @@ def joint_policy_overrides(values: Mapping[str, Any]) -> dict[str, Any]:
     return overrides
 
 
+def policy_target(values: Mapping[str, Any]) -> str:
+    """Resolve the Hydra policy class for a normalized policy configuration.
+
+    The paper's joint-space CBF method has its own algorithm-facing class;
+    joint-space GD and the no-guidance ablation retain the comparison class.
+    """
+    validate_policy_config(values)
+    inference_space = str(values["inference_space"]).lower().strip()
+    guidance = str(values["guidance"]).lower().strip()
+    baseline = str(values["baseline_method"]).lower().strip()
+    if baseline == "jm2d":
+        return "embodisteer.policies.jm2d.DiffusionUnetTimmPolicyJM2D"
+    if baseline in ("post_hoc_cbf", "batch_sampling"):
+        return "embodisteer.policies.baselines.DiffusionUnetTimmPolicyBaseline"
+    if inference_space == "ee":
+        return "embodisteer.policies.ee_space.EmbodiSteerEESpacePolicy"
+    if guidance == "cbf":
+        return "embodisteer.policies.embodisteer.DiffusionUnetTimmPolicyEmbodiSteer"
+    return "embodisteer.policies.ee2joint.DiffusionUnetTimmPolicyJointSpace"
+
+
 def ee_policy_overrides(values: Mapping[str, Any]) -> dict[str, Any]:
     """Return shared inference and Cartesian-guidance constructor arguments."""
 
@@ -363,6 +384,7 @@ __all__ = [
     "PolicyConfigError",
     "ee_policy_overrides",
     "joint_policy_overrides",
+    "policy_target",
     "load_policy_config",
     "validate_policy_config",
 ]

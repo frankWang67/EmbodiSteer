@@ -30,6 +30,7 @@ from embodisteer.runtime_config import (
     ee_policy_overrides,
     joint_policy_overrides,
     load_policy_config,
+    policy_target,
 )
 from embodisteer.evaluation import evaluation_subdir, workflow_result_dir
 from embodisteer.kinematics.robot_config import infer_robot_cfg_name
@@ -221,18 +222,8 @@ def main(
     if steps_per_inference <= 0:
         steps_per_inference = int(cfg.task.action_horizon)
 
+    cfg.policy._target_ = policy_target(policy_settings)
     if use_baseline:
-        if baseline_method == 'jm2d':
-            cfg.policy._target_ = (
-                'embodisteer.policies.jm2d.'
-                'DiffusionUnetTimmPolicyJM2D'
-            )
-        else:
-            # Full EE-space denoising + post-hoc IK + (CBF or batch sampling)
-            cfg.policy._target_ = (
-                'embodisteer.policies.baselines.'
-                'DiffusionUnetTimmPolicyBaseline'
-            )
         robot_cfg_name = infer_robot_cfg_name(robot_uids)
         robot_urdf_path, ee_link_name, arm_dof = _infer_robot_kinematic_args(robot_cfg_name)
         with open_dict(cfg.policy):
@@ -255,10 +246,6 @@ def main(
             if arm_dof is not None:
                 cfg.policy.arm_dof = arm_dof
     elif inference_space == 'joint':
-        cfg.policy._target_ = (
-            'embodisteer.policies.ee2joint.'
-            'EmbodiSteerJointPolicy'
-        )
         robot_cfg_name = infer_robot_cfg_name(robot_uids)
         robot_urdf_path, ee_link_name, arm_dof = _infer_robot_kinematic_args(robot_cfg_name)
         with open_dict(cfg.policy):
@@ -273,10 +260,6 @@ def main(
                 cfg.policy.arm_dof = arm_dof
     else:
         # EE-space inference (default). guidance is either '' or 'gd'.
-        cfg.policy._target_ = (
-            'embodisteer.policies.ee_space.'
-            'EmbodiSteerEESpacePolicy'
-        )
         with open_dict(cfg.policy):
             for key, value in ee_policy_overrides(policy_settings).items():
                 cfg.policy[key] = value

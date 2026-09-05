@@ -4,12 +4,14 @@ import torch
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
 
 from diffusion_policy.model.common.normalizer import SingleFieldLinearNormalizer
-from embodisteer.policies.ee2joint import EmbodiSteerJointPolicy
+from hydra.utils import get_class
+from embodisteer.policies import EmbodiSteerJointPolicy
 from embodisteer.policies.ee_space import EmbodiSteerEESpacePolicy
 from embodisteer.runtime_config import (
     DEFAULT_POLICY_CONFIG,
     ee_policy_overrides,
     joint_policy_overrides,
+    policy_target,
 )
 
 
@@ -136,7 +138,7 @@ def _make_cpu_joint_policy(guidance):
     values = deepcopy(DEFAULT_POLICY_CONFIG)
     values.update({"inference_space": "joint", "guidance": guidance, "num_inference_steps": 2})
     constructor = joint_policy_overrides(values)
-    policy = EmbodiSteerJointPolicy(
+    policy = get_class(policy_target(values))(
         **_base_constructor_args(),
         robot_cfg_name="unused-in-mock-test.yml",
         arm_dof=6,

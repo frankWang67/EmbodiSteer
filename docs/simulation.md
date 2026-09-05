@@ -5,11 +5,11 @@ The primary simulation interface is the thin
 [`run_sim_workflow.py`](../run_sim_workflow.py). The direct
 [`eval_sim_single_robot.py`](../eval_sim_single_robot.py) and retained
 [`eval_sim_multi_robots.py`](../eval_sim_multi_robots.py) launchers are useful
-for focused checkpoint probes. They use the same public policy aliases and
+for focused checkpoint probes. They use the same policy classes, router and
 algorithm config as the physical path:
 
 ```python
-from embodisteer.policies import EmbodiSteerJointPolicy
+from embodisteer.policies import DiffusionUnetTimmPolicyEmbodiSteer
 ```
 
 Method selection now lives in a policy YAML:
@@ -17,9 +17,9 @@ Method selection now lives in a policy YAML:
 | policy YAML fields | method |
 | --- | --- |
 | `inference_space: ee`, `guidance.method: ""` | Cartesian EE baseline |
-| `inference_space: joint`, `guidance.method: ""` | unified EE-to-joint EmbodiSteer without collision guidance |
+| `inference_space: joint`, `guidance.method: ""` | EE-to-joint no-guidance comparison (`DiffusionUnetTimmPolicyJointSpace`) |
 | `inference_space: joint`, `guidance.method: cbf` | EmbodiSteer with joint-space CBF-QP guidance |
-| `inference_space: joint`, `guidance.method: gd` | gradient guidance ablation |
+| `inference_space: joint`, `guidance.method: gd` | gradient guidance comparison (`DiffusionUnetTimmPolicyJointSpace`) |
 
 The task and robot identifiers used in the paper are listed in
 [`configs/experiments/paper.yaml`](../configs/experiments/paper.yaml). The

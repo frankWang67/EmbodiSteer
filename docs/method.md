@@ -4,11 +4,12 @@ EmbodiSteer deploys a frozen Cartesian visuomotor diffusion policy on a target
 robot without robot-specific policy fine-tuning. The learned model consumes and
 predicts a relative Cartesian action representation. At inference time,
 EmbodiSteer carries the denoising trajectory in the target robot's joint space,
-projects every diffusion update through the robot's kinematics, and can add
-whole-body collision guidance.
+projects every diffusion update through the robot's kinematics, and applies
+whole-body CBF collision guidance.
 
 This document describes the public implementation. The main entry point is
-`embodisteer.policies.EmbodiSteerJointPolicy`; the local
+[`DiffusionUnetTimmPolicyEmbodiSteer`](../embodisteer/policies/embodisteer.py)
+(also exported as `embodisteer.policies.EmbodiSteerJointPolicy`); the local
 `diffusion_policy/` namespace supplies the model, normalizer, scheduler, and
 data/training components.
 
@@ -61,11 +62,10 @@ other cuRobo world primitives requires an explicit adapter change.
 
 ## Collision guidance
 
-The unified policy accepts three `guidance_method` values:
-
-- `""`: joint-space denoising without collision guidance;
-- `"cbf"`: a closed-form, batched CBF correction; and
-- `"gd"`: gradient descent on a signed-distance safety-margin penalty.
+The paper class uses `guidance_method="cbf"` exclusively at construction.
+Its reverse-diffusion loop and `_apply_cbf_guidance` are in `embodisteer.py`.
+The shared robot runtime supplies collision queries; the closed-form QP
+implementation is in [`guidance/cbf.py`](../embodisteer/guidance/cbf.py).
 
 For CBF guidance, let `a = grad h(q)`, let `m` be the requested safety margin,
 and let `gamma_k` be the step-dependent guidance scale. The implementation
@@ -83,10 +83,6 @@ Because each trajectory state has one aggregated collision inequality, the
 minimum-task-disturbance update has a closed form. Position and rotation can
 receive different weights through `W`; regularization keeps `H` invertible.
 
-Gradient guidance instead minimizes
-the hinge penalty `relu(d_curobo + m)^p` directly in joint space. Both modes
-apply one correction per denoising step and clamp the resulting joint update.
-
 With scheduling enabled, the guidance multiplier follows a logistic curve and
 becomes strongest near the end of denoising. This leaves early sampling more
 model-driven and concentrates collision correction as the action trajectory
@@ -96,6 +92,10 @@ becomes cleaner.
 
 The release keeps the following comparison paths under `embodisteer/policies`:
 
+- `ee2joint.DiffusionUnetTimmPolicyJointSpace`: joint-space denoising with
+  `guidance_method=""` (no guidance) or `"gd"` (gradient descent). GD is not
+  part of EmbodiSteer: it minimizes `relu(d_curobo + m)^p`, masks and clips the
+  gradient, then subtracts the scheduled scale times that clipped gradient;
 - Cartesian EE sampling, with optional end-effector-only corner guidance;
 - post-hoc CBF, which denoises in Cartesian space and applies one joint-space
   correction after IK;
@@ -111,7 +111,9 @@ The implementation is split by responsibility:
 
 | path | responsibility |
 | --- | --- |
-| `embodisteer/policies` | unified method and comparison policies |
+| `embodisteer/policies/embodisteer.py` | paper method: Cartesian denoising, Jacobian realization, CBF correction |
+| `embodisteer/policies/ee2joint.py` | no-guidance/GD comparisons and shared robot runtime |
+| `embodisteer/policies/baselines.py`, `jm2d.py`, `ee_space.py` | other comparison policies |
 | `embodisteer/kinematics` | pose conversion, SE(3) residuals, and damped Jacobian mapping |
 | `embodisteer/collision` | cuRobo sign conversion, SDF aggregation, and penalties |
 | `embodisteer/guidance` | guidance schedules and closed-form CBF solvers |

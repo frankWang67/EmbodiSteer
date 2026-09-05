@@ -5,7 +5,13 @@ Project-specific policies, kinematics, collision reductions and CBF solvers
 live under ``embodisteer``.
 """
 
-from .ee2joint import EmbodiSteerJointPolicy
+from .ee2joint import DiffusionUnetTimmPolicyJointSpace
+from .embodisteer import DiffusionUnetTimmPolicyEmbodiSteer, EmbodiSteerJointPolicy
 from .ee_space import EmbodiSteerEESpacePolicy
 
-__all__ = ["EmbodiSteerJointPolicy", "EmbodiSteerEESpacePolicy"]
+__all__ = [
+    "DiffusionUnetTimmPolicyEmbodiSteer",
+    "DiffusionUnetTimmPolicyJointSpace",
+    "EmbodiSteerJointPolicy",
+    "EmbodiSteerEESpacePolicy",
+]

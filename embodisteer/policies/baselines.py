@@ -4,7 +4,7 @@ import torch
 
 from diffusion_policy.common.pytorch_util import dict_apply
 from .ee2joint import (
-    DiffusionUnetTimmPolicyJointSpace,
+    _JointSpacePolicyRuntime,
 )
 
 from embodisteer.kinematics.rotation import (
@@ -14,7 +14,7 @@ from embodisteer.kinematics.rotation import (
 )
 
 
-class DiffusionUnetTimmPolicyBaseline(DiffusionUnetTimmPolicyJointSpace):
+class DiffusionUnetTimmPolicyBaseline(_JointSpacePolicyRuntime):
     """
     Baseline policies for comparison:
       - "post_hoc_cbf": full EE-space denoising, then IK, then one-shot CBF-QP correction

@@ -56,6 +56,7 @@ from embodisteer.runtime_config import (
     ee_policy_overrides,
     joint_policy_overrides,
     load_policy_config,
+    policy_target,
 )
 from embodisteer.runtime import repository_root
 
@@ -245,6 +246,7 @@ def main(input, output, robot_config,
     payload = torch.load(open(ckpt_path, 'rb'), map_location='cpu', pickle_module=dill)
     cfg = payload['cfg']
     policy_needs_obstacles = guidance != ''
+    cfg.policy._target_ = policy_target(policy_settings)
 
     if joint_space:
         if len(robots_config) != 1:
@@ -252,21 +254,11 @@ def main(input, output, robot_config,
                 "Joint-space real-world evaluation currently supports a single robot only."
             )
         robot_cfg_name = get_robot_cfg_name(robots_config[0]['robot_type'])
-        # The unified policy is used for both simulation and real-world
-        # joint-space inference.
-        cfg.policy._target_ = (
-            'embodisteer.policies.ee2joint.'
-            'EmbodiSteerJointPolicy'
-        )
         with open_dict(cfg.policy):
             for key, value in joint_policy_overrides(policy_settings).items():
                 cfg.policy[key] = value
             cfg.policy.robot_cfg_name = robot_cfg_name
     else:
-        cfg.policy._target_ = (
-            'embodisteer.policies.ee_space.'
-            'EmbodiSteerEESpacePolicy'
-        )
         with open_dict(cfg.policy):
             for key, value in ee_policy_overrides(policy_settings).items():
                 cfg.policy[key] = value

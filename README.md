@@ -48,23 +48,27 @@ manifest. Only those revisions are supported by the release scripts.
 `diffusion_policy/` is a local model, data-loading and training engine. It is
 kept API-compatible for checkpoint interoperability. All EmbodiSteer policy
 implementations and reusable pose/Jacobian, SDF-reduction and CBF components
-live under `embodisteer/`; new Hydra targets should use the public
-`embodisteer.policies` aliases. See [`docs/architecture.md`](docs/architecture.md).
+live under `embodisteer/`. Start with
+[`embodisteer/policies/embodisteer.py`](embodisteer/policies/embodisteer.py)
+to read the paper's denoising loop and CBF correction. See
+[`docs/architecture.md`](docs/architecture.md) for the shared runtime boundary.
 
 ## Public policy imports
 
-New configs should use the stable aliases below:
+The paper method and joint-space comparison have separate classes:
 
 ```python
-from embodisteer.policies import EmbodiSteerJointPolicy
+from embodisteer.policies import DiffusionUnetTimmPolicyEmbodiSteer  # paper: CBF
+from embodisteer.policies import DiffusionUnetTimmPolicyJointSpace  # no guidance / GD
 from embodisteer.policies import EmbodiSteerEESpacePolicy
 ```
 
 Checkpoints trained with the bundled Diffusion Policy model remain
 interoperable: the evaluation launchers load their stored configuration and
-weights, then select the stable public EmbodiSteer policy target requested by
-the policy YAML before constructing the workspace. New EmbodiSteer
-checkpoints/configurations should target `embodisteer.policies`.
+weights, then use `runtime_config.policy_target` to select the concrete class
+requested by the policy YAML before constructing the workspace. The public
+`EmbodiSteerJointPolicy` alias denotes `DiffusionUnetTimmPolicyEmbodiSteer`
+(CBF only), not the GD/no-guidance comparison class.
 
 ## Installation boundary
 

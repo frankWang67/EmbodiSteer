@@ -21,7 +21,7 @@ from embodisteer.policies import EmbodiSteerEESpacePolicy, EmbodiSteerJointPolic
 
 
 def test_public_policy_classes_have_public_modules():
-    assert EmbodiSteerJointPolicy.__module__ == "embodisteer.policies.ee2joint"
+    assert EmbodiSteerJointPolicy.__module__ == "embodisteer.policies.embodisteer"
     assert EmbodiSteerEESpacePolicy.__module__ == "embodisteer.policies.ee_space"
 
 

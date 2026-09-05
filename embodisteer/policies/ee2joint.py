@@ -1,3 +1,8 @@
+"""Joint-space comparison policies and shared robot runtime.
+
+The paper method lives in :mod:`embodisteer.policies.embodisteer`.
+"""
+
 from typing import Dict, Optional, Tuple, Any
 
 import torch
@@ -45,14 +50,12 @@ from embodisteer.guidance import (
 )
 
 
-class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
-    """
-    Joint-space inference wrapper with optional collision guidance.
+class _JointSpacePolicyRuntime(DiffusionUnetTimmPolicyEESpace):
+    """Shared robot resources and I/O, not a selectable inference method.
 
-    guidance_method controls guidance behavior:
-      - "" (empty, default): joint-space denoising without guidance
-      - "cbf": batched CBF-QP guidance in joint space
-      - "gd": gradient-descent guidance in joint space
+    Concrete sibling policies own their samplers: JointSpace for no guidance
+    or GD, EmbodiSteer for the paper's CBF method, and the post-hoc baselines.
+    The CBF query/QP adapters are also used by post-hoc baselines.
     """
 
     def __init__(
@@ -147,17 +150,11 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
         self._cached_world_key = None
         self._coll_env_query_idx = None
 
-    # ===========================
-    # Joint trajectory to env action
-    # ===========================
     def _joint_traj_to_env_action(self, q_traj: torch.Tensor) -> torch.Tensor:
         arm_q = q_traj[..., : self.arm_dof]
         grip = q_traj[..., self._robot_dof : self._robot_dof + 1]
         return torch.cat([arm_q, grip], dim=-1)
 
-    # ===========================
-    # Kinematics initialization
-    # ===========================
     def _ensure_kinematics(self, device: torch.device):
         if self._ik_solver is not None:
             return
@@ -207,6 +204,8 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
 
         self._compile_hot_functions(device)
         if self.guidance_method != "":
+            # Preserve the historical warm-up order for GD as well: these
+            # dummy tensors consume RNG before trajectory initialization.
             self._compile_cbf_functions(device)
 
     def _compile_hot_functions(self, device: torch.device):
@@ -263,9 +262,6 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
         _ = compiled_qp(dummy_jac, dummy_grad_h, dummy_h, dummy_scale)
         self._cbf_qp_fn = compiled_qp
 
-    # ===========================
-    # FK / IK / Jacobian helpers
-    # ===========================
     def _solve_start_joint_from_pose(self, chunk_start_pose: torch.Tensor) -> torch.Tensor:
         B = chunk_start_pose.shape[0]
         start_pos = chunk_start_pose[:, :3]
@@ -345,9 +341,6 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
     def _dls_pinv_map(self, twist: torch.Tensor, jacobian: torch.Tensor) -> torch.Tensor:
         return damped_least_squares_pinv(twist, jacobian, self.jacobian_damping)
 
-    # ===========================
-    # Collision infrastructure (for guidance)
-    # ===========================
     def _build_world_collision(self, obstacle_info: Any, device: torch.device, dtype: torch.dtype):
         if obstacle_info is None:
             obstacles = []
@@ -442,11 +435,6 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
             f"but query batch has size {batch_size}."
         )
 
-    def _collision_penalty(self, dist: torch.Tensor) -> torch.Tensor:
-        return collision_penalty(
-            dist, self.guidance_safety_margin, self.guidance_loss_power
-        )
-
     def _guidance_scale_at(self, idx: int, n_steps: int, t: torch.Tensor, dtype, device):
         return guidance_scale_at(
             idx,
@@ -522,70 +510,12 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
             regularization=self.guidance_cbf_lambda,
         )
 
-    def _compute_collision_grad(self, q_arm: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        if self._world_collision is None:
-            z = torch.zeros_like(q_arm)
-            return z, torch.zeros((), device=q_arm.device, dtype=q_arm.dtype)
-        B, T, D = q_arm.shape
-        with torch.enable_grad():
-            q_req = q_arm.detach().clone().requires_grad_(True)
-            q_flat = q_req.reshape(B * T, D).contiguous()
-            kin_state = self._kin_model.get_state(q_flat)
-            spheres = kin_state.link_spheres_tensor.reshape(B, T, -1, 4)
-            self._coll_query_buffer.update_buffer_shape(
-                spheres.shape, self._tensor_args, self._world_collision.collision_types,
-            )
-            dist = self._world_collision.get_sphere_distance(
-                spheres, self._coll_query_buffer, self._coll_weight,
-                self._coll_activation_distance,
-                env_query_idx=self._env_query_idx_for_batch(B, spheres.device),
-                return_loss=False, compute_esdf=True,
-            )
-            dist_agg = self._aggregate_signed_distance(dist)
-            penalty = self._collision_penalty(dist_agg)
-            loss = penalty.sum().sum()
-            grad = torch.autograd.grad(loss, q_req, allow_unused=True)[0]
-            if grad is None:
-                grad = torch.zeros_like(q_req)
-            return grad.detach(), loss.detach()
-
-    # ===========================
-    # Inference
-    # ===========================
-    def conditional_sample(
-        self,
-        condition_data,
-        condition_mask,
-        local_cond=None,
-        global_cond=None,
-        generator=None,
-        chunk_start_pose: Optional[torch.Tensor] = None,
-        obstacle_info=None,
-        current_joint_angles: Optional[torch.Tensor] = None,
-        **kwargs,
+    def _initialize_joint_sample(
+        self, condition_data, condition_mask, chunk_start_pose,
+        current_joint_angles, base_pos, base_rot, generator,
     ):
-        if chunk_start_pose is None:
-            raise ValueError("chunk_start_pose is required for joint-space inference.")
-
-        self._ensure_kinematics(condition_data.device)
-
-        use_guidance = (self.guidance_method != "")
-        if use_guidance:
-            self._build_world_collision(
-                obstacle_info=obstacle_info,
-                device=condition_data.device,
-                dtype=condition_data.dtype,
-            )
-
-        base_pos = chunk_start_pose[:, :3]
-        base_rot = axis_angle_to_matrix(chunk_start_pose[:, 3:6])
-        base_rot_t = base_rot.transpose(-2, -1)
-
-        model = self.model
-        scheduler = self.noise_scheduler
-        bsz = condition_data.shape[0]
-        horizon = condition_data.shape[1]
-
+        """Project initial noise and realize inpainted targets using this robot."""
+        bsz, horizon = condition_data.shape[:2]
         # ── 1) Obtain starting joint configuration
         if current_joint_angles is None:
             q_start = self._solve_start_joint_from_pose(chunk_start_pose)
@@ -631,101 +561,33 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
             q_cond = torch.cat([q_cond_arm, cond_cart[..., 9:10]], dim=-1)
             q_traj[cond_step_mask] = q_cond[cond_step_mask]
 
-        # ── 4) Denoising in joint space
-        scheduler.set_timesteps(self.num_inference_steps)
-        timesteps = list(scheduler.timesteps)
-        n_steps = len(timesteps)
+        return q_traj, q_cond, cond_step_mask
 
-        for idx, t in enumerate(timesteps):
-            if q_cond is not None:
-                q_traj[cond_step_mask] = q_cond[cond_step_mask]
+    def _joint_to_cartesian(self, q_traj, base_pos, base_rot_t):
+        """Encode the joint trajectory in the frozen Cartesian model's frame."""
+        bsz, horizon = q_traj.shape[:2]
+        q_arm_curr = q_traj[..., : self._robot_dof]
+        grip_curr = q_traj[..., self._robot_dof : self._robot_dof + 1]
+        abs_pos_curr, abs_rot_curr = self._fk_to_absolute(q_arm_curr)
 
-            q_arm_curr = q_traj[..., : self._robot_dof]
-            grip_curr = q_traj[..., self._robot_dof : self._robot_dof + 1]
-            abs_pos_curr, abs_rot_curr = self._fk_to_absolute(q_arm_curr)
+        # Relative Cartesian for U-Net
+        rel_pos_curr = (base_rot_t.unsqueeze(1)
+                        @ (abs_pos_curr - base_pos.unsqueeze(1)).unsqueeze(-1)).squeeze(-1)
+        rel_rot_curr = base_rot_t.unsqueeze(1) @ abs_rot_curr
+        rel_rot6d_curr = matrix_to_rot6d(rel_rot_curr.reshape(-1, 3, 3)).reshape(bsz, horizon, 6)
+        cart_phys_curr = torch.cat([rel_pos_curr, rel_rot6d_curr, grip_curr], dim=-1)
+        cart_n_curr = self.normalizer["action"].normalize(cart_phys_curr)
+        return cart_n_curr, abs_pos_curr, abs_rot_curr
 
-            # Relative Cartesian for U-Net
-            rel_pos_curr = (base_rot_t.unsqueeze(1)
-                            @ (abs_pos_curr - base_pos.unsqueeze(1)).unsqueeze(-1)).squeeze(-1)
-            rel_rot_curr = base_rot_t.unsqueeze(1) @ abs_rot_curr
-            rel_rot6d_curr = matrix_to_rot6d(rel_rot_curr.reshape(-1, 3, 3)).reshape(bsz, horizon, 6)
-            cart_phys_curr = torch.cat([rel_pos_curr, rel_rot6d_curr, grip_curr], dim=-1)
-            cart_n_curr = self.normalizer["action"].normalize(cart_phys_curr)
-            cart_n_curr[condition_mask] = condition_data[condition_mask]
-
-            eps_cart_n = model(cart_n_curr, t, local_cond=local_cond, global_cond=global_cond)
-
-            # Scheduler step in normalized Cartesian space
-            cart_n_prev_tgt = scheduler.step(
-                eps_cart_n, t, cart_n_curr, generator=generator, **kwargs,
-            ).prev_sample
-            cart_n_prev_tgt[condition_mask] = condition_data[condition_mask]
-            cart_phys_prev_tgt = self.normalizer["action"].unnormalize(cart_n_prev_tgt)
-
-            # Target absolute pose
-            rel9_tgt = cart_phys_prev_tgt[..., :9]
-            rel_pos_tgt = rel9_tgt[..., :3]
-            rel_rot_tgt = rot6d_to_matrix(rel9_tgt[..., 3:])
-            abs_pos_tgt = (base_rot.unsqueeze(1) @ rel_pos_tgt.unsqueeze(-1)).squeeze(-1) + base_pos.unsqueeze(1)
-            abs_rot_tgt = base_rot.unsqueeze(1) @ rel_rot_tgt
-
-            # World-frame twist
-            twist6 = self._twist_fn(abs_pos_curr, abs_rot_curr, abs_pos_tgt, abs_rot_tgt).clone()
-
-            # Clamped Jacobian step
-            jac = self._jacobian(q_arm_curr)
-            jac_ref = jac
-            q_ref_for_jac = q_arm_curr
-            dq = self._dls_pinv_map(twist6.reshape(-1, 6), jac).reshape(bsz, horizon, self._robot_dof)
-            if self.max_dq_per_step > 0:
-                dq = torch.clamp(dq, -self.max_dq_per_step, self.max_dq_per_step)
-            q_arm_new = q_arm_curr + dq
-
-            # ── Guidance application
-            if use_guidance and self._world_collision is not None:
-                if self.guidance_method == "cbf":
-                    h_value, grad_h, _ = self._compute_cbf_linearization(q_arm_new)
-                    state_change = (q_arm_new - q_ref_for_jac).abs().max()
-                    if state_change < 0.5:
-                        jac_lin = jac_ref.reshape(bsz, horizon, 6, self._robot_dof)
-                    else:
-                        jac_lin = self._jacobian(q_arm_new).reshape(
-                            bsz, horizon, 6, self._robot_dof
-                        )
-                    gamma = self._guidance_scale_at(idx, n_steps, t, q_arm_new.dtype, q_arm_new.device)
-                    dq_cbf, _, _, _ = self._cbf_qp_fn(jac_lin, grad_h, h_value, gamma)
-                    if torch.any(cond_step_mask):
-                        dq_cbf = dq_cbf.clone()
-                        dq_cbf[cond_step_mask] = 0.0
-                    if self.guidance_grad_clip > 0:
-                        dq_cbf = torch.clamp(dq_cbf, -self.guidance_grad_clip, self.guidance_grad_clip)
-                    q_arm_new = q_arm_new + dq_cbf
-                else:  # gd
-                    grad, _ = self._compute_collision_grad(q_arm_new)
-                    if torch.any(cond_step_mask):
-                        grad = grad.clone()
-                        grad[cond_step_mask] = 0.0
-                    if self.guidance_grad_clip > 0:
-                        grad = torch.clamp(grad, -self.guidance_grad_clip, self.guidance_grad_clip)
-                    gamma = self._guidance_scale_at(idx, n_steps, t, q_arm_new.dtype, q_arm_new.device)
-                    q_arm_new = q_arm_new - gamma * grad
-
-            q_traj = torch.cat([q_arm_new, cart_phys_prev_tgt[..., 9:10]], dim=-1)
-
+    def _finalize_joint_sample(
+        self, q_traj, q_cond, cond_step_mask, condition_data, condition_mask,
+        base_pos, base_rot_t,
+    ):
+        """Restore conditions and expose both joint and Cartesian trajectories."""
         if q_cond is not None:
             q_traj[cond_step_mask] = q_cond[cond_step_mask]
-
         self._last_joint_traj = q_traj.detach()
-
-        # Return normalized Cartesian action (keeps external API unchanged)
-        q_arm_final = q_traj[..., : self._robot_dof]
-        grip_final = q_traj[..., self._robot_dof : self._robot_dof + 1]
-        abs_p_f, abs_r_f = self._fk_to_absolute(q_arm_final)
-        rel_pos_f = (base_rot_t.unsqueeze(1) @ (abs_p_f - base_pos.unsqueeze(1)).unsqueeze(-1)).squeeze(-1)
-        rel_rot_f = base_rot_t.unsqueeze(1) @ abs_r_f
-        rel_rot6d_f = matrix_to_rot6d(rel_rot_f.reshape(-1, 3, 3)).reshape(bsz, horizon, 6)
-        cart_final = torch.cat([rel_pos_f, rel_rot6d_f, grip_final], dim=-1)
-        cart_final_n = self.normalizer["action"].normalize(cart_final)
+        cart_final_n, _, _ = self._joint_to_cartesian(q_traj, base_pos, base_rot_t)
         cart_final_n[condition_mask] = condition_data[condition_mask]
         return cart_final_n
 
@@ -799,6 +661,163 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
         return result
 
 
-EmbodiSteerJointPolicy = DiffusionUnetTimmPolicyJointSpace
+class DiffusionUnetTimmPolicyJointSpace(_JointSpacePolicyRuntime):
+    """Joint-space denoising comparison with no guidance (default) or GD.
+
+    For the paper's CBF method, select DiffusionUnetTimmPolicyEmbodiSteer.
+    """
+
+    def __init__(self, *args, guidance_method: str = "", **kwargs):
+        guidance_method = str(guidance_method).lower().strip()
+        if guidance_method not in ("", "gd"):
+            raise ValueError(
+                "DiffusionUnetTimmPolicyJointSpace accepts only '' or 'gd'. "
+                "Use DiffusionUnetTimmPolicyEmbodiSteer for CBF guidance."
+            )
+        super().__init__(*args, guidance_method=guidance_method, **kwargs)
+
+    def _collision_penalty(self, dist: torch.Tensor) -> torch.Tensor:
+        return collision_penalty(
+            dist, self.guidance_safety_margin, self.guidance_loss_power
+        )
+
+    def _compute_collision_grad(self, q_arm: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        if self._world_collision is None:
+            z = torch.zeros_like(q_arm)
+            return z, torch.zeros((), device=q_arm.device, dtype=q_arm.dtype)
+        B, T, D = q_arm.shape
+        with torch.enable_grad():
+            q_req = q_arm.detach().clone().requires_grad_(True)
+            q_flat = q_req.reshape(B * T, D).contiguous()
+            kin_state = self._kin_model.get_state(q_flat)
+            spheres = kin_state.link_spheres_tensor.reshape(B, T, -1, 4)
+            self._coll_query_buffer.update_buffer_shape(
+                spheres.shape, self._tensor_args, self._world_collision.collision_types,
+            )
+            dist = self._world_collision.get_sphere_distance(
+                spheres, self._coll_query_buffer, self._coll_weight,
+                self._coll_activation_distance,
+                env_query_idx=self._env_query_idx_for_batch(B, spheres.device),
+                return_loss=False, compute_esdf=True,
+            )
+            dist_agg = self._aggregate_signed_distance(dist)
+            penalty = self._collision_penalty(dist_agg)
+            loss = penalty.sum().sum()
+            grad = torch.autograd.grad(loss, q_req, allow_unused=True)[0]
+            if grad is None:
+                grad = torch.zeros_like(q_req)
+            return grad.detach(), loss.detach()
+
+    def conditional_sample(
+        self,
+        condition_data,
+        condition_mask,
+        local_cond=None,
+        global_cond=None,
+        generator=None,
+        chunk_start_pose: Optional[torch.Tensor] = None,
+        obstacle_info=None,
+        current_joint_angles: Optional[torch.Tensor] = None,
+        **kwargs,
+    ):
+        if chunk_start_pose is None:
+            raise ValueError("chunk_start_pose is required for joint-space inference.")
+
+        if self.guidance_method not in ("", "gd"):
+            raise ValueError("Use DiffusionUnetTimmPolicyEmbodiSteer for CBF guidance.")
+
+        self._ensure_kinematics(condition_data.device)
+
+        use_guidance = (self.guidance_method != "")
+        if use_guidance:
+            self._build_world_collision(
+                obstacle_info=obstacle_info,
+                device=condition_data.device,
+                dtype=condition_data.dtype,
+            )
+
+        base_pos = chunk_start_pose[:, :3]
+        base_rot = axis_angle_to_matrix(chunk_start_pose[:, 3:6])
+        base_rot_t = base_rot.transpose(-2, -1)
+
+        model = self.model
+        scheduler = self.noise_scheduler
+        bsz = condition_data.shape[0]
+        horizon = condition_data.shape[1]
+
+        q_traj, q_cond, cond_step_mask = self._initialize_joint_sample(
+            condition_data, condition_mask, chunk_start_pose,
+            current_joint_angles, base_pos, base_rot, generator,
+        )
+
+        # Cartesian denoising with joint-space realization.
+        scheduler.set_timesteps(self.num_inference_steps)
+        timesteps = list(scheduler.timesteps)
+        n_steps = len(timesteps)
+
+        for idx, t in enumerate(timesteps):
+            if q_cond is not None:
+                q_traj[cond_step_mask] = q_cond[cond_step_mask]
+
+            q_arm_curr = q_traj[..., : self._robot_dof]
+            cart_n_curr, abs_pos_curr, abs_rot_curr = self._joint_to_cartesian(
+                q_traj, base_pos, base_rot_t
+            )
+            cart_n_curr[condition_mask] = condition_data[condition_mask]
+
+            eps_cart_n = model(cart_n_curr, t, local_cond=local_cond, global_cond=global_cond)
+
+            # Scheduler step in normalized Cartesian space
+            cart_n_prev_tgt = scheduler.step(
+                eps_cart_n, t, cart_n_curr, generator=generator, **kwargs,
+            ).prev_sample
+            cart_n_prev_tgt[condition_mask] = condition_data[condition_mask]
+            cart_phys_prev_tgt = self.normalizer["action"].unnormalize(cart_n_prev_tgt)
+
+            # Target absolute pose
+            rel9_tgt = cart_phys_prev_tgt[..., :9]
+            rel_pos_tgt = rel9_tgt[..., :3]
+            rel_rot_tgt = rot6d_to_matrix(rel9_tgt[..., 3:])
+            abs_pos_tgt = (base_rot.unsqueeze(1) @ rel_pos_tgt.unsqueeze(-1)).squeeze(-1) + base_pos.unsqueeze(1)
+            abs_rot_tgt = base_rot.unsqueeze(1) @ rel_rot_tgt
+
+            # World-frame twist
+            twist6 = self._twist_fn(abs_pos_curr, abs_rot_curr, abs_pos_tgt, abs_rot_tgt).clone()
+
+            # Clamped Jacobian step
+            jac = self._jacobian(q_arm_curr)
+            dq = self._dls_pinv_map(twist6.reshape(-1, 6), jac).reshape(bsz, horizon, self._robot_dof)
+            if self.max_dq_per_step > 0:
+                dq = torch.clamp(dq, -self.max_dq_per_step, self.max_dq_per_step)
+            q_arm_new = q_arm_curr + dq
+
+            # GD comparison: clip the gradient, then scale and subtract.
+            if use_guidance and self._world_collision is not None:
+                grad, _ = self._compute_collision_grad(q_arm_new)
+                if torch.any(cond_step_mask):
+                    grad = grad.clone()
+                    grad[cond_step_mask] = 0.0
+                if self.guidance_grad_clip > 0:
+                    grad = torch.clamp(grad, -self.guidance_grad_clip, self.guidance_grad_clip)
+                gamma = self._guidance_scale_at(idx, n_steps, t, q_arm_new.dtype, q_arm_new.device)
+                q_arm_new = q_arm_new - gamma * grad
+
+            q_traj = torch.cat([q_arm_new, cart_phys_prev_tgt[..., 9:10]], dim=-1)
+
+        return self._finalize_joint_sample(
+            q_traj, q_cond, cond_step_mask, condition_data, condition_mask,
+            base_pos, base_rot_t,
+        )
+
+
+def __getattr__(name):
+    # Keep the historical paper alias importable without a circular import.
+    # It denotes CBF only; GD callers must use the explicit JointSpace class.
+    if name == "EmbodiSteerJointPolicy":
+        from .embodisteer import DiffusionUnetTimmPolicyEmbodiSteer
+
+        return DiffusionUnetTimmPolicyEmbodiSteer
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = ["EmbodiSteerJointPolicy", "DiffusionUnetTimmPolicyJointSpace"]

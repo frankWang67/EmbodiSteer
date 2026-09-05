@@ -1,7 +1,8 @@
 # Real-world deployment
 
-The physical and simulation paths share the unified
-`EmbodiSteerJointPolicy`. The supported entry point is:
+The physical and simulation paths share the same policy classes and method
+router. The paper profile uses `DiffusionUnetTimmPolicyEmbodiSteer`.
+The supported entry point is:
 
 ```console
 python eval_real.py \
@@ -14,8 +15,9 @@ python eval_real.py \
 
 The policy YAML selects Cartesian or joint-space inference, guidance, CBF/SDF
 settings. The paper profile selects joint-space CBF
-guidance. Compatible checkpoint Hydra targets are normalized to the public
-`EmbodiSteerJointPolicy` alias at runtime.
+guidance. At runtime, compatible checkpoint Hydra targets are selected by
+`runtime_config.policy_target`: joint CBF uses the paper class, while joint
+GD/no-guidance uses `ee2joint.DiffusionUnetTimmPolicyJointSpace`.
 
 ## Configuration boundary
 

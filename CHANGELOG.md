@@ -5,6 +5,14 @@ pre-publication phase, so no versioned release has been tagged yet.
 
 ## Unreleased
 
+- Moved the paper's denoising loop and CBF correction into
+  `policies/embodisteer.py:DiffusionUnetTimmPolicyEmbodiSteer`. Joint-space
+  GD/no-guidance remains in `ee2joint.py:DiffusionUnetTimmPolicyJointSpace`;
+  sibling policies share robot resources and checkpoint-compatible I/O.
+  Evaluation and benchmark targets now use one method-aware config router.
+  The `EmbodiSteerJointPolicy` alias denotes the CBF class only; direct
+  GD/no-guidance callers must use `DiffusionUnetTimmPolicyJointSpace`.
+
 - Removed the retired policy implementation tree. Checkpoint interoperability
   is provided by loading Diffusion Policy weights into the stable public
   policy selected by the evaluation profile, rather than by preserving

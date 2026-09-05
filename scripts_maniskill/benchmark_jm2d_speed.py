@@ -41,6 +41,7 @@ from embodisteer.runtime_config import (
     ee_policy_overrides,
     joint_policy_overrides,
     load_policy_config,
+    policy_target,
 )
 
 
@@ -298,52 +299,45 @@ def add_robot_and_guidance_config(cfg, policy_settings):
 
 
 def configure_method(base_cfg, method, policy_settings):
+    # Benchmark labels select the method; the YAML supplies its numeric
+    # settings. Resolve every class through the same router as deployment.
+    policy_settings = dict(policy_settings)
+    policy_settings.update(inference_space="joint", guidance="", baseline_method="")
+    if method == "vanilla":
+        policy_settings["inference_space"] = "ee"
+    elif method == "embodisteer":
+        policy_settings["guidance"] = "cbf"
+    elif method.startswith("batch_sampling_"):
+        policy_settings["baseline_method"] = "batch_sampling"
+    elif parse_jm2d_method(method) is not None:
+        policy_settings["baseline_method"] = "jm2d"
     cfg = copy.deepcopy(base_cfg)
+    cfg.policy._target_ = policy_target(policy_settings)
     with open_dict(cfg.policy):
         cfg.policy.num_inference_steps = policy_settings["num_inference_steps"]
     if method == "vanilla":
-        cfg.policy._target_ = (
-            "embodisteer.policies.ee_space."
-            "EmbodiSteerEESpacePolicy"
-        )
         with open_dict(cfg.policy):
             for key, value in ee_policy_overrides(policy_settings).items():
                 cfg.policy[key] = value
             cfg.policy.use_ee_guidance = False
     elif method == "joint_space_no_guidance":
-        cfg.policy._target_ = (
-            "embodisteer.policies.ee2joint."
-            "EmbodiSteerJointPolicy"
-        )
         add_robot_config(cfg, include_robot_uid=False)
         with open_dict(cfg.policy):
             for key, value in joint_policy_overrides(policy_settings).items():
                 cfg.policy[key] = value
             cfg.policy.guidance_method = ""
     elif method == "embodisteer":
-        cfg.policy._target_ = (
-            "embodisteer.policies.ee2joint."
-            "EmbodiSteerJointPolicy"
-        )
         add_robot_and_guidance_config(cfg, policy_settings)
         with open_dict(cfg.policy):
             cfg.policy.guidance_method = policy_settings["guidance"]
     elif method.startswith("batch_sampling_"):
         num_samples = int(method.rsplit("_", 1)[1])
-        cfg.policy._target_ = (
-            "embodisteer.policies.baselines."
-            "DiffusionUnetTimmPolicyBaseline"
-        )
         add_robot_and_guidance_config(cfg, policy_settings)
         with open_dict(cfg.policy):
             cfg.policy.baseline_method = "batch_sampling"
             cfg.policy.batch_sampling_num = num_samples
     elif parse_jm2d_method(method) is not None:
         num_samples, _ = parse_jm2d_method(method)
-        cfg.policy._target_ = (
-            "embodisteer.policies.jm2d."
-            "DiffusionUnetTimmPolicyJM2D"
-        )
         add_robot_and_guidance_config(cfg, policy_settings)
         with open_dict(cfg.policy):
             cfg.policy.jm2d_num_samples = num_samples
@@ -600,7 +594,7 @@ def main():
             "embodisteer": {
                 "space": "joint",
                 "guidance": "cbf",
-                "policy_class": "EmbodiSteerJointPolicy",
+                "policy_class": "DiffusionUnetTimmPolicyEmbodiSteer",
                 "guidance_scale": policy_settings["guidance_scale"],
                 "guidance_safety_margin": policy_settings["guidance_safety_margin"],
                 "guidance_activation_distance": policy_settings["guidance_activation_distance"],

@@ -10,11 +10,30 @@ from embodisteer.runtime_config import (
     ee_policy_overrides,
     joint_policy_overrides,
     load_policy_config,
+    policy_target,
     validate_policy_config,
 )
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_all_checked_in_profiles_route_by_method_not_the_paper_alias():
+    for path in sorted((ROOT / "configs/policy").glob("**/*.yaml")):
+        if path.name.endswith(".local.yaml"):
+            continue
+        config = load_policy_config(path)
+        target = policy_target(config)
+        if config["baseline_method"] == "jm2d":
+            assert target.endswith("jm2d.DiffusionUnetTimmPolicyJM2D"), path
+        elif config["baseline_method"]:
+            assert target.endswith("baselines.DiffusionUnetTimmPolicyBaseline"), path
+        elif config["inference_space"] == "ee":
+            assert target.endswith("ee_space.EmbodiSteerEESpacePolicy"), path
+        elif config["guidance"] == "cbf":
+            assert target.endswith("embodisteer.DiffusionUnetTimmPolicyEmbodiSteer"), path
+        else:
+            assert target.endswith("ee2joint.DiffusionUnetTimmPolicyJointSpace"), path
 
 
 def test_checked_in_policy_profiles_load():

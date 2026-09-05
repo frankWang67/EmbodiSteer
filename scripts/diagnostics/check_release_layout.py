@@ -30,6 +30,7 @@ REQUIRED_PATHS = (
     "README.md",
     "embodisteer/__init__.py",
     "embodisteer/policies/ee2joint.py",
+    "embodisteer/policies/embodisteer.py",
     "embodisteer/policies/ee_space.py",
     "embodisteer/policies/baselines.py",
     "embodisteer/policies/jm2d.py",
@@ -314,6 +315,7 @@ def main() -> None:
     errors = check_layout(root)
     if args.import_policy:
         importlib.import_module("embodisteer.policies.ee2joint")
+        importlib.import_module("embodisteer.policies.embodisteer")
         importlib.import_module("embodisteer.policies.ee_space")
         importlib.import_module("embodisteer.policies.baselines")
         importlib.import_module("embodisteer.policies.jm2d")

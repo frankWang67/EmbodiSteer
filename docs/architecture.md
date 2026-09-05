@@ -11,9 +11,30 @@ The repository contains two Python namespaces with different responsibilities:
 the repository itself. EmbodiSteer additions are deliberately not placed in
 this namespace, preserving its public model and checkpoint interfaces.
 
-The unified joint policy is implemented at
-`embodisteer.policies.ee2joint.EmbodiSteerJointPolicy`; new launchers target
-this stable alias. Its implementation calls the public modules below:
+The paper method is implemented in
+[`embodisteer/policies/embodisteer.py`](../embodisteer/policies/embodisteer.py),
+as `DiffusionUnetTimmPolicyEmbodiSteer`. Its `conditional_sample` shows the
+Cartesian denoising, Jacobian realization and per-step CBF correction;
+`_apply_cbf_guidance` shows the correction's linearization, schedule and clip.
+
+`ee2joint.py` retains `DiffusionUnetTimmPolicyJointSpace` for no-guidance and
+GD comparisons. The two are sibling classes sharing the private
+`_JointSpacePolicyRuntime` in `ee2joint.py`, which owns robot resources,
+FK/IK/Jacobian adapters, collision queries, initialization, and observation/action
+I/O. Post-hoc baselines also reuse this runtime, not the paper sampler.
+No learned modules are nested under a new attribute, so checkpoint state-dict
+keys remain unchanged.
+
+`runtime_config.policy_target` selects the concrete class from the policy YAML
+for simulation, real deployment and benchmarks. The public
+`embodisteer.policies.EmbodiSteerJointPolicy` alias now denotes only the paper's
+CBF class. The historical alias in `ee2joint` forwards to the same class;
+direct GD/no-guidance callers must use `DiffusionUnetTimmPolicyJointSpace`.
+Direct callers of that class with `guidance_method="cbf"` must migrate to the
+new class. Launchers perform this selection automatically, including for old
+checkpoint configurations.
+
+The policies call these public modules:
 
 - `embodisteer.kinematics`: pose conversion, SE(3) residuals and damped
   Jacobian pseudoinverse;
