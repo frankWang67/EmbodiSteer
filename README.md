@@ -84,6 +84,23 @@ requested by the policy YAML before constructing the workspace. The public
 4. Materialize the pinned dependencies with the bootstrap script. The script
    never runs implicitly.
 
+Complete installation from a fresh checkout:
+
+```console
+git clone https://github.com/frankWang67/EmbodiSteer.git
+cd EmbodiSteer
+conda env create -f environment/environment.yaml
+conda activate embodisteer
+python scripts/bootstrap_third_party.py --check
+python scripts/bootstrap_third_party.py --install --cuda-home /usr/local/cuda
+python -m pip install -e '.[dev]'
+python -m pip check
+python -m pytest -q
+```
+
+Replace `/usr/local/cuda` with the CUDA toolkit used by the installed PyTorch
+build. If the fixed forks are already installed, omit the `--install` command.
+
 The repository does not publish or require project checkpoint and training
 data artifacts for installation. The empty artifact inventory is intentional
 rather than a missing download link. Complete paper-table reproduction will be
@@ -121,6 +138,37 @@ For a newly trained checkpoint, preview the complete simulation pipeline with:
 
 ```console
 ./run_sim_pipeline.sh \
+  --config configs/workflows/simulation.yaml --stage all --dry-run
+```
+
+The checked-in workflow targets `MakeIcedCoffee-v1`. After installing the
+pinned ManiSkill/cuRobo forks, run the complete local workflow on a selected
+GPU with:
+
+```console
+CUDA_VISIBLE_DEVICES=0 ./run_sim_pipeline.sh \
+  --config configs/workflows/simulation.yaml --stage all
+```
+
+To evaluate an existing checkpoint without recollecting data or retraining,
+use the single-robot entry point:
+
+```console
+CUDA_VISIBLE_DEVICES=0 python eval_sim_single_robot.py \
+  --input /path/to/checkpoint.ckpt --ckpt_filename latest \
+  --env_id MakeIcedCoffee-v1 \
+  --robot_uids panda_robotiq_wristcam \
+  --sim_backend physx_cpu --control_mode pd_joint_pos \
+  --num_env 1 --num_eval_episodes 10 --steps_per_inference 8 \
+  --obstacle \
+  --policy-config configs/policy/make_iced_coffee/embodisteer.yaml
+```
+
+For a lightweight configuration check that does not require a checkpoint or
+hardware, use:
+
+```console
+python run_sim_workflow.py \
   --config configs/workflows/simulation.yaml --stage all --dry-run
 ```
 

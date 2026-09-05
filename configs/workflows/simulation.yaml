@@ -5,17 +5,17 @@ schema_version: 1
 # Data, checkpoints and run outputs are intentionally outside the tracked source
 # tree (the default paths below are ignored by .gitignore).
 task:
-  name: PickPlaceToasterToCounter
-  env_id: PickPlaceToasterToCounter-v1
-  env_name: PickPlaceToasterToCounter
+  name: MakeIcedCoffee
+  env_id: MakeIcedCoffee-v1
+  env_name: MakeIcedCoffee
 
 paths:
   # The bootstrap script materializes the pinned ManiSkill checkout here.
   maniskill_root: third_party/src/maniskill
   data_root: data
   h5_filename: merged_data_local.h5
-  dataset_filename: ManiSkill_PickPlaceToasterToCounter_local.zarr.zip
-  train_output_dir: data/outputs/pickplace_local
+  dataset_filename: ManiSkill_MakeIcedCoffee_local.zarr.zip
+  train_output_dir: data/outputs/coffee_local
 
 collection:
   # The total is divided equally across the selected collection robots.
@@ -44,10 +44,10 @@ training:
 
 evaluation:
   output_dir: data/outputs/evaluation
-  run_id: pickplace_local
+  run_id: coffee_local
   profiles:
     ee: configs/policy/ee.yaml
-    embodisteer: configs/policy/embodisteer.yaml
+    embodisteer: configs/policy/make_iced_coffee/embodisteer.yaml
   robots:
     - panda_robotiq_wristcam
   sim_backend: physx_cpu

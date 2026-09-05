@@ -75,10 +75,19 @@ def test_checked_in_workflow_resolves_pinned_fork_and_artifacts():
     config = load_workflow_config(CONFIG_PATH)
     paths = workflow_paths(config)
 
+    assert config["task"] == {
+        "name": "MakeIcedCoffee",
+        "env_id": "MakeIcedCoffee-v1",
+        "env_name": "MakeIcedCoffee",
+    }
     assert paths["maniskill_root"] == ROOT_DIR / "third_party" / "src" / "maniskill"
-    assert paths["dataset"].name.endswith(".zarr.zip")
+    assert paths["dataset"].name == "ManiSkill_MakeIcedCoffee_local.zarr.zip"
+    assert paths["train_output"] == ROOT_DIR / "data/outputs/coffee_local"
     assert paths["checkpoint"] == paths["train_output"] / "checkpoints" / "latest.ckpt"
-    assert paths["evaluation_output"] == ROOT_DIR / "data/outputs/evaluation/pickplace_local"
+    assert paths["evaluation_output"] == ROOT_DIR / "data/outputs/evaluation/coffee_local"
+    assert config["evaluation"]["profiles"]["embodisteer"]["policy_config"].endswith(
+        "configs/policy/make_iced_coffee/embodisteer.yaml"
+    )
     assert get_class("embodisteer.training.NoOpImageRunner").__name__ == "NoOpImageRunner"
 
 
