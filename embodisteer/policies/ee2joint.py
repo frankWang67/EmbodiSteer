@@ -1,5 +1,4 @@
-from typing import Dict, Optional, Tuple, List, Any
-import os
+from typing import Dict, Optional, Tuple, Any
 
 import torch
 import pytorch_kinematics as pk
@@ -37,7 +36,9 @@ from embodisteer.collision import (
 )
 from embodisteer.kinematics import (
     damped_least_squares_pinv,
+    twist6_from_matrices_fast,
 )
+from embodisteer.kinematics.robot_config import infer_robot_cfg_name
 from embodisteer.guidance import (
     guidance_scale_at,
     solve_batched_cbf_qp,
@@ -87,7 +88,7 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
         **kwargs,
     ):
         if robot_cfg_name is None:
-            robot_cfg_name = self._infer_robot_cfg_name(robot_uid)
+            robot_cfg_name = infer_robot_cfg_name(robot_uid)
 
         super().__init__(*args, **kwargs)
 
@@ -147,93 +148,12 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
         self._coll_env_query_idx = None
 
     # ===========================
-    # Robot config inference
-    # ===========================
-    @staticmethod
-    def _infer_robot_cfg_name(robot_uid: Optional[str]) -> str:
-        if robot_uid is None:
-            return "panda_robotiq_wristcam.yml"
-        mapping = {
-            "panda_robotiq_wristcam": "panda_robotiq_wristcam.yml",
-            "ur5_robotiq_wristcam": "ur5_robotiq_wristcam.yml",
-            "xarm6_robotiq_wristcam": "xarm6_robotiq_wristcam.yml",
-            "xarm7_robotiq_wristcam": "xarm7_robotiq_wristcam.yml",
-            "floating_robotiq_2f_85_gripper_wristcam": "floating_robotiq_wristcam.yml",
-            "floating_robotiq_wristcam": "floating_robotiq_wristcam.yml",
-        }
-        if robot_uid in mapping:
-            return mapping[robot_uid]
-        candidate = f"{robot_uid}.yml"
-        cfg_path = os.path.join(get_robot_configs_path(), candidate)
-        if os.path.exists(cfg_path):
-            return candidate
-        raise ValueError(f"Cannot infer cuRobo robot config for robot_uid={robot_uid}")
-
-    # ===========================
     # Joint trajectory to env action
     # ===========================
     def _joint_traj_to_env_action(self, q_traj: torch.Tensor) -> torch.Tensor:
         arm_q = q_traj[..., : self.arm_dof]
         grip = q_traj[..., self._robot_dof : self._robot_dof + 1]
         return torch.cat([arm_q, grip], dim=-1)
-
-    # ===========================
-    # Fast rotation helpers (index-op-free, compilable)
-    # ===========================
-    @staticmethod
-    def _sqrt_positive_part_fast(x: torch.Tensor) -> torch.Tensor:
-        return torch.sqrt(torch.relu(x))
-
-    @staticmethod
-    def _matrix_to_quaternion_fast(matrix: torch.Tensor) -> torch.Tensor:
-        batch_dim = matrix.shape[:-2]
-        m00, m01, m02, m10, m11, m12, m20, m21, m22 = torch.unbind(
-            matrix.reshape(batch_dim + (9,)), dim=-1,
-        )
-        q_abs = DiffusionUnetTimmPolicyJointSpace._sqrt_positive_part_fast(
-            torch.stack([
-                1.0 + m00 + m11 + m22, 1.0 + m00 - m11 - m22,
-                1.0 - m00 + m11 - m22, 1.0 - m00 - m11 + m22,
-            ], dim=-1),
-        )
-        quat_by_rijk = torch.stack([
-            torch.stack([q_abs[..., 0] ** 2, m21 - m12, m02 - m20, m10 - m01], dim=-1),
-            torch.stack([m21 - m12, q_abs[..., 1] ** 2, m10 + m01, m02 + m20], dim=-1),
-            torch.stack([m02 - m20, m10 + m01, q_abs[..., 2] ** 2, m12 + m21], dim=-1),
-            torch.stack([m10 - m01, m20 + m02, m21 + m12, q_abs[..., 3] ** 2], dim=-1),
-        ], dim=-2)
-        dtype = q_abs.dtype
-        flr = torch.tensor(0.1, device=q_abs.device, dtype=dtype)
-        quat_candidates = quat_by_rijk / (2.0 * q_abs[..., None].max(flr))
-        weights = torch.nn.functional.one_hot(
-            q_abs.argmax(dim=-1), num_classes=4,
-        ).to(dtype=dtype)
-        out = (quat_candidates * weights.unsqueeze(-1)).sum(dim=-2).reshape(
-            batch_dim + (4,),
-        )
-        return torch.where(out[..., 0:1] < 0, -out, out)
-
-    @staticmethod
-    def _quaternion_to_axis_angle_fast(quaternions: torch.Tensor) -> torch.Tensor:
-        quaternions = quaternions / torch.linalg.norm(
-            quaternions, dim=-1, keepdim=True,
-        )
-        w, vec = quaternions[..., 0], quaternions[..., 1:]
-        half_angles = torch.acos(torch.clamp(w, -1.0, 1.0))
-        angles = 2.0 * half_angles
-        small_mask = (angles < 1e-6).unsqueeze(-1)
-        sin_half = torch.sin(half_angles).unsqueeze(-1)
-        half_clamped = half_angles.clamp(min=1e-12).unsqueeze(-1)
-        axis_raw = vec / torch.where(small_mask, 1.0, sin_half)
-        taylor = vec / torch.where(small_mask, half_clamped, 1.0)
-        axis = torch.where(small_mask, taylor, axis_raw)
-        return angles.unsqueeze(-1) * axis
-
-    @staticmethod
-    def _matrix_to_axis_angle_fast(matrix: torch.Tensor) -> torch.Tensor:
-        return DiffusionUnetTimmPolicyJointSpace._quaternion_to_axis_angle_fast(
-            DiffusionUnetTimmPolicyJointSpace._matrix_to_quaternion_fast(matrix),
-        )
 
     # ===========================
     # Kinematics initialization
@@ -311,7 +231,7 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
         dummy_rot_c = I3.unsqueeze(0).unsqueeze(0).expand(bsz, horizon, 3, 3).contiguous()
         dummy_rot_t = dummy_rot_c.clone()
         compiled_twist = torch.compile(
-            self._twist6_from_matrices, fullgraph=True, mode="reduce-overhead",
+            twist6_from_matrices_fast, fullgraph=True, mode="reduce-overhead",
         )
         _ = compiled_twist(dummy_pos_c, dummy_rot_c, dummy_pos_t, dummy_rot_t)
         self._twist_fn = compiled_twist
@@ -424,21 +344,6 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
 
     def _dls_pinv_map(self, twist: torch.Tensor, jacobian: torch.Tensor) -> torch.Tensor:
         return damped_least_squares_pinv(twist, jacobian, self.jacobian_damping)
-
-    def _twist6_from_matrices(
-        self, abs_pos_curr: torch.Tensor, abs_rot_curr: torch.Tensor,
-        abs_pos_tgt: torch.Tensor, abs_rot_tgt: torch.Tensor,
-    ) -> torch.Tensor:
-        bsz, horizon = abs_pos_curr.shape[:2]
-        pos_cur = abs_pos_curr.reshape(-1, 3)
-        rot_cur = abs_rot_curr.reshape(-1, 3, 3)
-        pos_tgt = abs_pos_tgt.reshape(-1, 3)
-        rot_tgt = abs_rot_tgt.reshape(-1, 3, 3)
-        dpos = pos_tgt - pos_cur
-        drot = self._matrix_to_axis_angle_fast(
-            rot_tgt @ rot_cur.transpose(-2, -1)
-        )
-        return torch.cat([dpos, drot], dim=-1).reshape(bsz, horizon, 6)
 
     # ===========================
     # Collision infrastructure (for guidance)
@@ -554,21 +459,6 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
             device=device,
         )
 
-    @staticmethod
-    def _curobo_signed_distance_to_cbf_h(dist_signed: torch.Tensor) -> torch.Tensor:
-        """
-        Map cuRobo signed distance to CBF safety function h(q).
-
-        cuRobo ESDF convention:
-          - positive: inside obstacle (unsafe)
-          - negative: outside obstacle (safe)
-        CBF convention used here:
-          - h >= 0: safe
-
-        Therefore: h = -dist_signed
-        """
-        return curobo_signed_distance_to_cbf_h(dist_signed)
-
     def _query_worst_signed_distance(self, q_arm: torch.Tensor) -> torch.Tensor:
         B, T, D = q_arm.shape
         q_flat = q_arm.reshape(B * T, D).contiguous()
@@ -603,7 +493,7 @@ class DiffusionUnetTimmPolicyJointSpace(DiffusionUnetTimmPolicyEESpace):
         with torch.enable_grad():
             q_req = q_arm.detach().clone().requires_grad_(True)
             dist_worst = self._query_worst_signed_distance(q_req)
-            h = self._curobo_signed_distance_to_cbf_h(dist_worst)
+            h = curobo_signed_distance_to_cbf_h(dist_worst)
             grad_h = torch.autograd.grad(h.sum(), q_req, allow_unused=True)[0]
             if grad_h is None:
                 grad_h = torch.zeros_like(q_req)

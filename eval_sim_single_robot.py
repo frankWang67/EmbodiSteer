@@ -32,6 +32,7 @@ from embodisteer.runtime_config import (
     load_policy_config,
 )
 from embodisteer.evaluation import evaluation_subdir, workflow_result_dir
+from embodisteer.kinematics.robot_config import infer_robot_cfg_name
 from diffusion_policy.common.pytorch_util import dict_apply
 from diffusion_policy.workspace.base_workspace import BaseWorkspace
 from umi.real_world.real_inference_util import (
@@ -220,14 +221,6 @@ def main(
     if steps_per_inference <= 0:
         steps_per_inference = int(cfg.task.action_horizon)
 
-    robot_cfg_name_map = {
-        'panda_robotiq_wristcam': 'panda_robotiq_wristcam.yml',
-        'ur5_robotiq_wristcam': 'ur5_robotiq_wristcam.yml',
-        'xarm6_robotiq_wristcam': 'xarm6_robotiq_wristcam.yml',
-        'xarm7_robotiq_wristcam': 'xarm7_robotiq_wristcam.yml',
-        'floating_robotiq_2f_85_gripper_wristcam': 'floating_robotiq_wristcam.yml',
-    }
-
     if use_baseline:
         if baseline_method == 'jm2d':
             cfg.policy._target_ = (
@@ -240,7 +233,7 @@ def main(
                 'embodisteer.policies.baselines.'
                 'DiffusionUnetTimmPolicyBaseline'
             )
-        robot_cfg_name = robot_cfg_name_map.get(robot_uids, f'{robot_uids}.yml')
+        robot_cfg_name = infer_robot_cfg_name(robot_uids)
         robot_urdf_path, ee_link_name, arm_dof = _infer_robot_kinematic_args(robot_cfg_name)
         with open_dict(cfg.policy):
             for key, value in joint_policy_overrides(policy_settings).items():
@@ -266,7 +259,7 @@ def main(
             'embodisteer.policies.ee2joint.'
             'EmbodiSteerJointPolicy'
         )
-        robot_cfg_name = robot_cfg_name_map.get(robot_uids, f'{robot_uids}.yml')
+        robot_cfg_name = infer_robot_cfg_name(robot_uids)
         robot_urdf_path, ee_link_name, arm_dof = _infer_robot_kinematic_args(robot_cfg_name)
         with open_dict(cfg.policy):
             for key, value in joint_policy_overrides(policy_settings).items():

@@ -17,6 +17,7 @@ import dill
 import torch
 
 from diffusion_policy.common.pytorch_util import dict_apply
+from embodisteer.kinematics import twist6_from_matrices_fast
 from scripts_maniskill.benchmark_jm2d_speed import configure_method, load_policy
 from embodisteer.runtime_config import load_policy_config
 
@@ -223,7 +224,7 @@ def main():
 
     if args.disable_hot_compile:
         policy._jacobian_fn = policy._pk_chain.jacobian_tensor
-        policy._twist_fn = policy._twist6_from_matrices
+        policy._twist_fn = twist6_from_matrices_fast
 
         def eager_cbf_qp(jac, grad_h, h_value, constraint_scale):
             return policy._solve_batched_cbf_qp(

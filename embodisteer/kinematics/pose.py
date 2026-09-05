@@ -12,6 +12,7 @@ import torch
 from .rotation import (
     axis_angle_to_matrix,
     matrix_to_axis_angle,
+    matrix_to_axis_angle_fast,
     matrix_to_rotation_6d,
     rotation_6d_to_matrix,
 )
@@ -94,6 +95,28 @@ def twist6_from_matrices(
     return torch.cat([dpos, drot], dim=-1).reshape(batch, horizon, 6)
 
 
+def twist6_from_matrices_fast(
+    abs_pos_curr: torch.Tensor,
+    abs_rot_curr: torch.Tensor,
+    abs_pos_tgt: torch.Tensor,
+    abs_rot_tgt: torch.Tensor,
+) -> torch.Tensor:
+    """Compute world-frame twists using the paper's fast rotation path.
+
+    This is intentionally distinct from ``twist6_from_matrices``: small-angle
+    results differ, so joint inference must keep using this fast variant.
+    Inputs have shapes (B, T, 3) and (B, T, 3, 3); output has shape (B, T, 6).
+    """
+    batch, horizon = abs_pos_curr.shape[:2]
+    pos_cur = abs_pos_curr.reshape(-1, 3)
+    rot_cur = abs_rot_curr.reshape(-1, 3, 3)
+    pos_tgt = abs_pos_tgt.reshape(-1, 3)
+    rot_tgt = abs_rot_tgt.reshape(-1, 3, 3)
+    dpos = pos_tgt - pos_cur
+    drot = matrix_to_axis_angle_fast(rot_tgt @ rot_cur.transpose(-2, -1))
+    return torch.cat([dpos, drot], dim=-1).reshape(batch, horizon, 6)
+
+
 def absolute_pose_delta_to_twist6(
     abs_pose9_curr: torch.Tensor,
     abs_pose9_tgt: torch.Tensor,
@@ -131,4 +154,5 @@ __all__ = [
     "pose9d_to_mat",
     "relative_pose9_to_absolute",
     "twist6_from_matrices",
+    "twist6_from_matrices_fast",
 ]

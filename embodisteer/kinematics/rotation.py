@@ -142,6 +142,41 @@ def matrix_to_quaternion(matrix: torch.Tensor) -> torch.Tensor:
     return standardize_quaternion(out)
 
 
+def _sqrt_positive_part_fast(x: torch.Tensor) -> torch.Tensor:
+    """Return a compilable positive-part square root for the paper fast path."""
+    return torch.sqrt(torch.relu(x))
+
+
+def matrix_to_quaternion_fast(matrix: torch.Tensor) -> torch.Tensor:
+    """Convert matrices using the index-op-free paper fast path."""
+    batch_dim = matrix.shape[:-2]
+    m00, m01, m02, m10, m11, m12, m20, m21, m22 = torch.unbind(
+        matrix.reshape(batch_dim + (9,)), dim=-1,
+    )
+    q_abs = _sqrt_positive_part_fast(
+        torch.stack([
+            1.0 + m00 + m11 + m22, 1.0 + m00 - m11 - m22,
+            1.0 - m00 + m11 - m22, 1.0 - m00 - m11 + m22,
+        ], dim=-1),
+    )
+    quat_by_rijk = torch.stack([
+        torch.stack([q_abs[..., 0] ** 2, m21 - m12, m02 - m20, m10 - m01], dim=-1),
+        torch.stack([m21 - m12, q_abs[..., 1] ** 2, m10 + m01, m02 + m20], dim=-1),
+        torch.stack([m02 - m20, m10 + m01, q_abs[..., 2] ** 2, m12 + m21], dim=-1),
+        torch.stack([m10 - m01, m20 + m02, m21 + m12, q_abs[..., 3] ** 2], dim=-1),
+    ], dim=-2)
+    dtype = q_abs.dtype
+    flr = torch.tensor(0.1, device=q_abs.device, dtype=dtype)
+    quat_candidates = quat_by_rijk / (2.0 * q_abs[..., None].max(flr))
+    weights = torch.nn.functional.one_hot(
+        q_abs.argmax(dim=-1), num_classes=4,
+    ).to(dtype=dtype)
+    out = (quat_candidates * weights.unsqueeze(-1)).sum(dim=-2).reshape(
+        batch_dim + (4,),
+    )
+    return torch.where(out[..., 0:1] < 0, -out, out)
+
+
 def standardize_quaternion(quaternions: torch.Tensor) -> torch.Tensor:
     """
     Convert a unit quaternion to a standard form: one in which the real
@@ -250,6 +285,32 @@ def quaternion_to_axis_angle(quaternions: torch.Tensor) -> torch.Tensor:
         0.5 - (angles[small_angles] * angles[small_angles]) / 48
     )
     return quaternions[..., 1:] / sin_half_angles_over_angles
+
+
+def quaternion_to_axis_angle_fast(quaternions: torch.Tensor) -> torch.Tensor:
+    """Convert quaternions using the index-op-free paper fast path."""
+    quaternions = quaternions / torch.linalg.norm(
+        quaternions, dim=-1, keepdim=True,
+    )
+    w, vec = quaternions[..., 0], quaternions[..., 1:]
+    half_angles = torch.acos(torch.clamp(w, -1.0, 1.0))
+    angles = 2.0 * half_angles
+    small_mask = (angles < 1e-6).unsqueeze(-1)
+    sin_half = torch.sin(half_angles).unsqueeze(-1)
+    half_clamped = half_angles.clamp(min=1e-12).unsqueeze(-1)
+    axis_raw = vec / torch.where(small_mask, 1.0, sin_half)
+    taylor = vec / torch.where(small_mask, half_clamped, 1.0)
+    axis = torch.where(small_mask, taylor, axis_raw)
+    return angles.unsqueeze(-1) * axis
+
+
+def matrix_to_axis_angle_fast(matrix: torch.Tensor) -> torch.Tensor:
+    """Convert matrices using the compilable rotation path used by the paper.
+
+    Keep its arithmetic unchanged: the acos-based small-angle behavior differs
+    from ``matrix_to_axis_angle`` and is part of the reproduction numerics.
+    """
+    return quaternion_to_axis_angle_fast(matrix_to_quaternion_fast(matrix))
 
 
 def rotation_6d_to_matrix(d6: torch.Tensor) -> torch.Tensor:

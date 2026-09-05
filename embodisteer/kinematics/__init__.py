@@ -8,6 +8,7 @@ from .pose import (
     pose9d_to_mat,
     relative_pose9_to_absolute,
     twist6_from_matrices,
+    twist6_from_matrices_fast,
 )
 from .pose_repr import batched_convert_pose_mat_rep
 
@@ -20,4 +21,5 @@ __all__ = [
     "pose9d_to_mat",
     "relative_pose9_to_absolute",
     "twist6_from_matrices",
+    "twist6_from_matrices_fast",
 ]
