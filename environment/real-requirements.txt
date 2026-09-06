@@ -1,0 +1,12 @@
+# Real-robot profile. No ManiSkill/SAPIEN; cuRobo is still needed for joint inference.
+# RealSense is optional: install the matching vendor SDK only when requested.
+-r base-requirements.txt
+v4l2py==2.2
+ur-rtde==1.5.6
+robotiq_gripper @ https://github.com/frankWang67/robotiq_modbus_gripper/archive/582a6c26a2462adb58c60ba229ad9578556cf464.tar.gz
+pymodbus==3.8.6
+pyserial==3.5
+pynput==1.7.6
+fastcrc==0.2
+PyExifTool==0.5
+zerorpc==0.6.3

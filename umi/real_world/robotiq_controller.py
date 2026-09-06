@@ -23,18 +23,19 @@ class RobotiqController(mp.Process):
             command_queue_size=1024,
             launch_timeout=3,
             receive_latency=0.0,
-            verbose=False
+            verbose=False,
+            slave_id=9,
             ):
         super().__init__(name="RobotiqController", daemon=True)
         try:
             from robotiq_gripper import RobotiqModBusGripper
         except ModuleNotFoundError as exc:
             raise RuntimeError(
-                "The serial Robotiq backend is optional and is only required "
-                "when robot_type selects that gripper. Install the matching "
-                "hardware driver before real-robot execution."
+                "gripper_type='robotiq' requires robotiq_gripper and its serial "
+                "dependencies. Install the pinned Robotiq dependencies from "
+                "environment/real-requirements.txt (see docs/real_world.md)."
             ) from exc
-        self.gripper = RobotiqModBusGripper(width=0.085, port=port)
+        self.gripper = RobotiqModBusGripper(width=0.085, port=port, slave_id=slave_id)
         self.frequency = frequency
         self.move_max_speed = move_max_speed
         self.move_max_force = move_max_force

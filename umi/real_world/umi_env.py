@@ -6,10 +6,7 @@ import shutil
 import math
 import cv2
 from multiprocessing.managers import SharedMemoryManager
-from umi.real_world.rtde_interpolation_controller import RTDEInterpolationController
-from umi.real_world.wsg_controller import WSGController
-from umi.real_world.robotiq_controller import RobotiqController
-from umi.real_world.franka_interpolation_controller import FrankaInterpolationController
+from umi.real_world.gripper_controller import create_gripper_controller
 from umi.real_world.multi_uvc_camera import MultiUvcCamera, VideoRecorder
 from diffusion_policy.common.timestamp_accumulator import (
     TimestampActionAccumulator,
@@ -34,7 +31,7 @@ class UmiEnv:
             # required params
             output_dir,
             robot_ip,
-            gripper_ip,
+            gripper_ip=None,
             gripper_port=1000,
             # env params
             frequency=20,
@@ -78,7 +75,10 @@ class UmiEnv:
             enable_multi_cam_vis=True,
             multi_cam_vis_resolution=(960, 960),
             # shared memory
-            shm_manager=None
+            shm_manager=None,
+            # Robotiq serial connection; appended to preserve positional callers.
+            gripper_serial_port='/dev/ttyUSB0',
+            gripper_slave_id=9,
             ):
         output_dir = pathlib.Path(output_dir)
         assert output_dir.parent.is_dir()
@@ -235,6 +235,8 @@ class UmiEnv:
             j_init = None
 
         if robot_type.startswith('ur5'):
+            from umi.real_world.rtde_interpolation_controller import RTDEInterpolationController
+
             robot = RTDEInterpolationController(
                 shm_manager=shm_manager,
                 robot_ip=robot_ip,
@@ -255,6 +257,8 @@ class UmiEnv:
                 receive_latency=robot_obs_latency
                 )
         elif robot_type.startswith('franka'):
+            from umi.real_world.franka_interpolation_controller import FrankaInterpolationController
+
             tx_controller_ee_tip = None
             if curobo_robot_config is not None:
                 if controller_ee_link is None:
@@ -283,19 +287,14 @@ class UmiEnv:
                 tx_controller_ee_tip=tx_controller_ee_tip,
             )
         
-        if gripper_type == 'wsg50':
-            gripper = WSGController(
-                shm_manager=shm_manager,
-                hostname=gripper_ip,
-                port=gripper_port,
-                receive_latency=gripper_obs_latency,
-                use_meters=True
-            )
-        elif gripper_type == 'robotiq':
-            gripper = RobotiqController(
-                shm_manager=shm_manager,
-                receive_latency=gripper_obs_latency,
-            )
+        gripper = create_gripper_controller(shm_manager, {
+            'gripper_type': gripper_type,
+            'gripper_serial_port': gripper_serial_port,
+            'gripper_slave_id': gripper_slave_id,
+            'gripper_ip': gripper_ip,
+            'gripper_port': gripper_port,
+            'gripper_obs_latency': gripper_obs_latency,
+        })
 
         self.camera = camera
         self.robot = robot

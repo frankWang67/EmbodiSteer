@@ -26,6 +26,15 @@ to non-commercial research or evaluation. External URDF and mesh terms are
 listed in cuRobo's `LICENSE_ASSETS` and must not be replaced by the project
 license.
 
+## Robotiq Modbus driver
+
+The serial gripper backend depends on
+[`frankWang67/robotiq_modbus_gripper`](https://github.com/frankWang67/robotiq_modbus_gripper)
+at commit `582a6c26a2462adb58c60ba229ad9578556cf464`. Its package metadata
+declares MIT, but that revision does not include a standalone license file.
+The source is installed as an external pip dependency, not bundled here;
+confirm the complete upstream license notice before redistributing its source.
+
 ## Project-specific asset ledger
 
 Three benchmark asset groups are included in the repository. Their complete

@@ -72,31 +72,46 @@ requested by the policy YAML before constructing the workspace. The public
 
 ## Installation boundary
 
-1. Create an environment from [`environment/environment.yaml`](environment/environment.yaml).
+1. Choose [simulation](environment/environment-simulation.yaml) or
+   [real robot](environment/environment-real.yaml); their SDK dependencies are separate.
 2. Install or expose this checkout (`pip install -e .` or run commands from
    this directory).
 3. Validate the dependency manifest:
 
    ```console
-   python scripts/bootstrap_third_party.py --check
+   python scripts/bootstrap_third_party.py --profile simulation --check
    ```
 
 4. Materialize the pinned dependencies with the bootstrap script. The script
    never runs implicitly.
 
-Complete installation from a fresh checkout:
+Simulation installation from a fresh checkout:
 
 ```console
 git clone https://github.com/frankWang67/EmbodiSteer.git
 cd EmbodiSteer
-conda env create -f environment/environment.yaml
-conda activate embodisteer
-python scripts/bootstrap_third_party.py --check
-python scripts/bootstrap_third_party.py --install --cuda-home /usr/local/cuda
+conda env create -f environment/environment-simulation.yaml
+conda activate embodisteer-sim
+python scripts/bootstrap_third_party.py --profile simulation --check
+python scripts/bootstrap_third_party.py --profile simulation --install --cuda-home /usr/local/cuda
 python -m pip install -e '.[dev]'
 python -m pip check
-python -m pytest -q
+python -m pytest -q tests/test_deployment_boundaries.py tests/test_real_preflight.py
 ```
+
+For a real-only workstation, use this instead (cuRobo is shared; ManiSkill is not installed):
+
+```console
+conda env create -f environment/environment-real.yaml
+conda activate embodisteer-real
+python scripts/bootstrap_third_party.py --profile real --install --cuda-home /usr/local/cuda
+python -m pip install -e '.[dev]'
+python -m pip check
+```
+
+See [installation](docs/installation.md) for the separate dry-run/preflight
+commands. The old `environment.yaml` remains an all-in-one compatibility
+profile; it is not needed for either single-purpose workstation.
 
 Replace `/usr/local/cuda` with the CUDA toolkit used by the installed PyTorch
 build. If the fixed forks are already installed, omit the `--install` command.
@@ -109,7 +124,7 @@ documented only after their release location is decided.
 ## Simulation entry points
 
 `run_sim_pipeline.sh` is the simplest interface for simulation experiments; it
-enters the `embodisteer` Conda environment and forwards all options to
+enters the `embodisteer-sim` Conda environment and forwards all options to
 `run_sim_workflow.py`. The Python workflow
 orchestrates collection, conversion, validation, training, multi-profile
 evaluation and result aggregation from one workflow YAML. The lower-level

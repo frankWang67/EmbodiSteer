@@ -6,10 +6,7 @@ import shutil
 import math
 import cv2
 from multiprocessing.managers import SharedMemoryManager
-from umi.real_world.rtde_interpolation_controller import RTDEInterpolationController
-from umi.real_world.wsg_controller import WSGController
-from umi.real_world.robotiq_controller import RobotiqController
-from umi.real_world.franka_interpolation_controller import FrankaInterpolationController
+from umi.real_world.gripper_controller import create_gripper_controller
 from umi.real_world.multi_uvc_camera import MultiUvcCamera, VideoRecorder
 from diffusion_policy.common.timestamp_accumulator import (
     TimestampActionAccumulator,
@@ -41,7 +38,7 @@ class BimanualUmiEnv:
             # required params
             output_dir,
             robots_config, # list of dict[{robot_type: 'ur5', robot_ip: XXX, obs_latency: 0.0001, action_latency: 0.1, tcp_offset: 0.21}]
-            grippers_config, # list of dict[{gripper_ip: XXX, gripper_port: 1000, obs_latency: 0.01, , action_latency: 0.1}]
+            grippers_config, # per-robot gripper settings; see configs/real/robot.template.yaml
             # env params
             frequency=20,
             # obs
@@ -275,10 +272,11 @@ class BimanualUmiEnv:
             j_init = None
 
         assert len(robots_config) == len(grippers_config)
-        robots: List[RTDEInterpolationController] = list()
-        grippers: List[WSGController] = list()
+        robots = list()
         for rc in robots_config:
             if rc['robot_type'].startswith('ur5'):
+                from umi.real_world.rtde_interpolation_controller import RTDEInterpolationController
+
                 assert rc['robot_type'] in ['ur5', 'ur5e']
                 this_robot = RTDEInterpolationController(
                     shm_manager=shm_manager,
@@ -301,6 +299,8 @@ class BimanualUmiEnv:
                     receive_latency=rc['robot_obs_latency']
                 )
             elif rc['robot_type'].startswith('franka'):
+                from umi.real_world.franka_interpolation_controller import FrankaInterpolationController
+
                 tx_controller_ee_tip = None
                 if 'curobo_robot_config' in rc:
                     controller_ee_link = rc.get('controller_ee_link')
@@ -333,22 +333,10 @@ class BimanualUmiEnv:
                 raise NotImplementedError()
             robots.append(this_robot)
 
-        for gc in grippers_config:
-            if gc['gripper_type'] == 'wsg50':
-                this_gripper = WSGController(
-                    shm_manager=shm_manager,
-                    hostname=gc['gripper_ip'],
-                    port=gc['gripper_port'],
-                    receive_latency=gc['gripper_obs_latency'],
-                    use_meters=True
-                )
-            elif gc['gripper_type'] == 'robotiq':
-                this_gripper = RobotiqController(
-                    shm_manager=shm_manager,
-                    receive_latency=gc['gripper_obs_latency'],
-                )
-
-            grippers.append(this_gripper)
+        grippers = [
+            create_gripper_controller(shm_manager, gc)
+            for gc in grippers_config
+        ]
 
         self.camera = camera
         self.aux_realsense = aux_realsense

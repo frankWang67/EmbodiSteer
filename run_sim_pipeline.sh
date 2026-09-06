@@ -7,7 +7,7 @@ cd "${REPO_ROOT}"
 
 # Task settings live in the workflow YAML selected with --config. Every CLI
 # argument is handled by run_sim_workflow.py and is forwarded unchanged here.
-EMBODISTEER_CONDA_ENV="${EMBODISTEER_CONDA_ENV:-embodisteer}"
+EMBODISTEER_CONDA_ENV="${EMBODISTEER_CONDA_ENV:-embodisteer-sim}"
 export PYTHONUNBUFFERED=1
 export TORCHDYNAMO_DISABLE="${TORCHDYNAMO_DISABLE:-1}"
 

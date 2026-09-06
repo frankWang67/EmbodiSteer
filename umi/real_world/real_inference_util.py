@@ -239,11 +239,10 @@ def wait_until_still(env, velocity_threshold=0.01, timeout=5.0):
     return False
 
 def get_robot_cfg_name(robot_type: str) -> str:
+    from embodisteer.real_config import REAL_JOINT_ROBOT_CONFIGS
+
     robot_type = str(robot_type).lower()
-    robot_cfg_name_map = {
-        'ur5': 'ur5_robotiq_umi.yml',
-        'franka': 'panda_robotiq_umi.yml',
-    }
+    robot_cfg_name_map = REAL_JOINT_ROBOT_CONFIGS
     if robot_type not in robot_cfg_name_map:
         raise KeyError(f"Unsupported robot_type for joint-space policy adaptation: {robot_type}")
     return robot_cfg_name_map[robot_type]

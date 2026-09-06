@@ -13,8 +13,7 @@ import time
 import numpy as np
 from multiprocessing.managers import SharedMemoryManager
 import scipy.spatial.transform as st
-# from umi.real_world.spacemouse_shared_memory import Spacemouse
-from umi.real_world.keyboard_spacemouse_shared_memory import KeyboardSpacemouse as Spacemouse
+from umi.real_world.keyboard_shared_memory import Keyboard
 from umi.real_world.rtde_interpolation_controller import RTDEInterpolationController
 from umi.real_world.franka_interpolation_controller import FrankaInterpolationController
 from umi.common.precise_sleep import precise_wait
@@ -55,7 +54,7 @@ def main(robot_hostname, frequency):
         #     Kxd_scale=np.array([2.0,2.0,2.0,2.0,2.0,2.0]),
         #     verbose=False
         ) as controller,\
-        Spacemouse(
+        Keyboard(
             shm_manager=shm_manager
         ) as sm:
             print('Ready!')

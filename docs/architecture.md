@@ -46,7 +46,7 @@ Rotation and pose-representation helpers remain in `diffusion_policy.common`.
 EmbodiSteer-specific rotation conversions and guided-diffusion loss helpers are
 namespaced under `embodisteer.kinematics` and `embodisteer.guidance`.
 
-Only ManiSkill and cuRobo are external repositories. Their exact URLs and
+ManiSkill and cuRobo are the two editable dependency forks. Their exact URLs and
 commits are recorded in `third_party/manifest.yaml`.
 
 Checkpoint interoperability covers the standard Diffusion Policy payload

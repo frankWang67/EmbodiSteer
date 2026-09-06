@@ -1,7 +1,12 @@
 import multiprocessing as mp
 import numpy as np
 import time
-from spnav import spnav_open, spnav_poll_event, spnav_close, SpnavMotionEvent, SpnavButtonEvent
+try:
+    from spnav import spnav_open, spnav_poll_event, spnav_close, SpnavMotionEvent, SpnavButtonEvent
+    SPNAV_IMPORT_ERROR = None
+except (ImportError, OSError) as exc:
+    # Keyboard deployments do not need spnav or its native libspnav library.
+    SPNAV_IMPORT_ERROR = exc
 from umi.shared_memory.shared_memory_ring_buffer import SharedMemoryRingBuffer
 
 class Spacemouse(mp.Process):
@@ -13,6 +18,7 @@ class Spacemouse(mp.Process):
             deadzone=(0,0,0,0,0,0), 
             dtype=np.float32,
             n_buttons=2,
+            launch_timeout=3.0,
             ):
         """
         Continuously listen to 3D connection space naviagtor events
@@ -30,6 +36,12 @@ class Spacemouse(mp.Process):
         y
         """
         super().__init__()
+        if SPNAV_IMPORT_ERROR is not None:
+            raise RuntimeError(
+                "input_device='spacemouse' requires spnav and libspnav. Install "
+                "environment/spacemouse-requirements.txt and the native packages "
+                "described in docs/real_world.md#teleoperation-input-device."
+            ) from SPNAV_IMPORT_ERROR
         if np.issubdtype(type(deadzone), np.number):
             deadzone = np.full(6, fill_value=deadzone, dtype=dtype)
         else:
@@ -42,6 +54,7 @@ class Spacemouse(mp.Process):
         self.dtype = dtype
         self.deadzone = deadzone
         self.n_buttons = n_buttons
+        self.launch_timeout = launch_timeout
         # self.motion_event = SpnavMotionEvent([0,0,0], [0,0,0], 0)
         # self.button_state = defaultdict(lambda: False)
         self.tx_zup_spnav = np.array([
@@ -110,7 +123,16 @@ class Spacemouse(mp.Process):
     def start(self, wait=True):
         super().start()
         if wait:
-            self.ready_event.wait()
+            if not self.ready_event.wait(self.launch_timeout):
+                self.stop_event.set()
+                self.join(timeout=self.launch_timeout)
+                if self.is_alive():
+                    self.terminate()
+                    self.join(timeout=self.launch_timeout)
+                raise RuntimeError(
+                    "SpaceMouse failed to start. Check that spacenavd is running "
+                    "and that the device and daemon socket are accessible."
+                )
     
     def stop(self, wait=True):
         self.stop_event.set()

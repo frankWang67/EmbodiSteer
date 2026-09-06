@@ -1,0 +1,9 @@
+# Simulation profile. Install the pinned ManiSkill and cuRobo forks separately.
+-r base-requirements.txt
+gymnasium==0.29.1
+dacite==1.9.2
+mplib==0.1.1
+fast_kinematics==0.2.2
+nvidia-ml-py==13.590.48
+tyro==1.0.5
+sapien==3.0.3

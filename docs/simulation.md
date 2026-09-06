@@ -64,7 +64,7 @@ directories.
 To add a task, place its workflow under `configs/workflows/<task>/` and select
 it with `--config`. Task names, environment IDs, artifact paths, collection
 settings, training overrides, policy profiles and robots all belong in that
-YAML; `run_sim_pipeline.sh` remains unchanged. It uses the `embodisteer` Conda
+YAML; `run_sim_pipeline.sh` remains unchanged. It uses the `embodisteer-sim` Conda
 environment by default, which can be overridden with
 `EMBODISTEER_CONDA_ENV=<name>`.
 

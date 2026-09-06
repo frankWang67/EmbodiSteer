@@ -23,6 +23,12 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from embodisteer.runtime import repository_root
 
+PROFILE_REPOSITORIES = {
+    "simulation": ("maniskill", "curobo"),
+    "real": ("curobo",),
+    "all": ("maniskill", "curobo"),
+}
+
 
 def _run(
     args: list[str],
@@ -51,10 +57,11 @@ def _load_manifest() -> dict[str, Any]:
         return yaml.safe_load(handle)
 
 
-def validate_manifest(allow_pending: bool = False) -> list[str]:
+def validate_manifest(allow_pending: bool = False, profile: str = "all") -> list[str]:
     manifest = _load_manifest()
     errors: list[str] = []
-    for name, spec in manifest.get("repositories", {}).items():
+    for name in PROFILE_REPOSITORIES[profile]:
+        spec = manifest.get("repositories", {}).get(name, {})
         for field in ("fork_url", "upstream_url", "install", "status"):
             if not spec.get(field):
                 errors.append(f"{name}: missing manifest field {field}")
@@ -67,14 +74,16 @@ def materialize(
     allow_pending: bool = False,
     install: bool = False,
     cuda_home: Path | None = None,
+    profile: str = "all",
 ) -> None:
-    errors = validate_manifest(allow_pending=allow_pending)
+    errors = validate_manifest(allow_pending=allow_pending, profile=profile)
     if errors:
         raise SystemExit("\n".join(errors))
 
     manifest = _load_manifest()
     root = repository_root()
-    for name, spec in manifest["repositories"].items():
+    for name in PROFILE_REPOSITORIES[profile]:
+        spec = manifest["repositories"][name]
         commit = spec.get("commit")
         if commit is None:
             print(f"SKIP {name}: pending clean commit")
@@ -114,6 +123,8 @@ def materialize(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--profile", choices=PROFILE_REPOSITORIES, default="all",
+                        help="simulation: ManiSkill + cuRobo; real: cuRobo only; all: compatibility default")
     parser.add_argument("--check", action="store_true", help="validate only")
     parser.add_argument("--allow-pending", action="store_true", help="allow null commits for inspection")
     parser.add_argument("--install", action="store_true", help="pip install each materialized checkout")
@@ -124,16 +135,17 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    errors = validate_manifest(allow_pending=args.allow_pending)
+    errors = validate_manifest(allow_pending=args.allow_pending, profile=args.profile)
     if args.check or errors:
         if errors:
             raise SystemExit("\n".join(errors))
-        print("third_party/manifest.yaml: OK")
+        print(f"third_party/manifest.yaml: OK (profile={args.profile})")
         return
     materialize(
         allow_pending=args.allow_pending,
         install=args.install,
         cuda_home=args.cuda_home,
+        profile=args.profile,
     )
 
 

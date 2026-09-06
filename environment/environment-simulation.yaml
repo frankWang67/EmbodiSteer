@@ -1,6 +1,5 @@
-# Compatibility all-in-one profile, not the recommended user installation.
 # Use a local checkout: pip includes below are relative to this directory.
-name: embodisteer
+name: embodisteer-sim
 channels:
   - conda-forge
   - defaults
@@ -11,6 +10,5 @@ dependencies:
   - av=10.0.0
   - cmake<3.28
   - llvm-openmp=14
-  - exiftool=12.76
   - pip:
-    - -r requirements.txt
+    - -r simulation-requirements.txt

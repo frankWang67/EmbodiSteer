@@ -1,3 +1,6 @@
+# Human teleoperation device: keyboard (default) or spacemouse.
+# SpaceMouse additionally requires the optional spnav/native system packages.
+input_device: keyboard
 robots:
   - robot_type: ur5
     robot_ip: YOUR_ROBOT_IP
@@ -8,10 +11,18 @@ robots:
     sphere_radius: 0.1
     sphere_center: [0.0, -0.06, -0.185]
 grippers:
-  - gripper_ip: YOUR_GRIPPER_IP
-    gripper_port: 1000
+  # One gripper per robot, in the same order. Robotiq is the default type.
+  - gripper_type: robotiq
+    gripper_serial_port: /dev/ttyUSB0  # Set to this gripper's serial device.
+    gripper_slave_id: 9
     gripper_obs_latency: 0.01
     gripper_action_latency: 0.1
+  # For WSG50, replace the entry above with this TCP configuration:
+  # - gripper_type: wsg50
+  #   gripper_ip: YOUR_GRIPPER_IP
+  #   gripper_port: 1000
+  #   gripper_obs_latency: 0.01
+  #   gripper_action_latency: 0.1
 tx_left_right:
   - [1.0, 0.0, 0.0, 0.0]
   - [0.0, 1.0, 0.0, 0.0]

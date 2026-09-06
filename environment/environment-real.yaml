@@ -1,6 +1,5 @@
-# Compatibility all-in-one profile, not the recommended user installation.
 # Use a local checkout: pip includes below are relative to this directory.
-name: embodisteer
+name: embodisteer-real
 channels:
   - conda-forge
   - defaults
@@ -13,4 +12,4 @@ dependencies:
   - llvm-openmp=14
   - exiftool=12.76
   - pip:
-    - -r requirements.txt
+    - -r real-requirements.txt

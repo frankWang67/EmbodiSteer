@@ -15,8 +15,7 @@ import pickle
 import pathlib
 from multiprocessing.managers import SharedMemoryManager
 import scipy.spatial.transform as st
-# from umi.real_world.spacemouse_shared_memory import Spacemouse
-from umi.real_world.keyboard_spacemouse_shared_memory import KeyboardSpacemouse as Spacemouse
+from umi.real_world.keyboard_shared_memory import Keyboard
 from umi.real_world.uvc_camera import UvcCamera
 from umi.real_world.rtde_interpolation_controller import RTDEInterpolationController
 from umi.real_world.keystroke_counter import KeystrokeCounter, KeyCode, Key
@@ -49,7 +48,7 @@ def main(output, robot_ip, v4l_idx):
 
     with SharedMemoryManager() as shm_manager:
         with KeystrokeCounter() as key_counter,\
-            Spacemouse(shm_manager=shm_manager) as sm,\
+            Keyboard(shm_manager=shm_manager) as sm,\
             UvcCamera(
                 shm_manager=shm_manager,
                 dev_video_path=v4l_path,

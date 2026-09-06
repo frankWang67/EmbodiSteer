@@ -10,7 +10,7 @@ except Exception as exc:  # allow headless CLI help and static imports
 from umi.shared_memory.shared_memory_ring_buffer import SharedMemoryRingBuffer
 from umi.common.precise_sleep import precise_wait
 
-class KeyboardSpacemouse(mp.Process):
+class Keyboard(mp.Process):
     def __init__(self, 
             shm_manager, 
             get_max_k=30, 
@@ -20,14 +20,14 @@ class KeyboardSpacemouse(mp.Process):
             dtype=np.float32, 
             n_buttons=2, 
             verbose=False):
-        super().__init__(name="KeyboardSpacemouse", daemon=True)
+        super().__init__(name="Keyboard", daemon=True)
         self.frequency = frequency
         self.launch_timeout = launch_timeout
         self.verbose = verbose
         self.n_buttons = n_buttons
         self.dtype = dtype
         
-        # 严格参照 Spacemouse 的共享内存数据结构
+        # 键盘运动指令和按钮状态的共享内存结构
         example = {
             'motion': np.zeros(6, dtype=dtype),
             'buttons': np.zeros(n_buttons, dtype=np.int64),
@@ -43,7 +43,7 @@ class KeyboardSpacemouse(mp.Process):
         self.ready_event = mp.Event()
         self.stop_event = mp.Event()
 
-    # ========= API 方法 (与 Spacemouse 完全一致) =========
+    # ========= 输入设备 API =========
 
     def start(self, wait=True):
         super().start()
@@ -51,7 +51,7 @@ class KeyboardSpacemouse(mp.Process):
             self.ready_event.wait(self.launch_timeout)
             if not self.ready_event.is_set():
                 raise RuntimeError(
-                    "KeyboardSpacemouse failed to become ready within "
+                    "Keyboard failed to become ready within "
                     f"{self.launch_timeout}s. This usually means the "
                     "pynput keyboard listener could not start."
                 )
@@ -91,7 +91,7 @@ class KeyboardSpacemouse(mp.Process):
     def run(self):
         if PYNPUT_IMPORT_ERROR is not None:
             raise RuntimeError(
-                "KeyboardSpacemouse requires a graphical pynput backend and "
+                "Keyboard requires a graphical pynput backend and "
                 "cannot run on a headless machine."
             ) from PYNPUT_IMPORT_ERROR
         # 键盘状态映射
@@ -158,4 +158,4 @@ class KeyboardSpacemouse(mp.Process):
         finally:
             listener.stop()
             if self.verbose:
-                print("[KeyboardSpacemouse] Listener stopped.")
+                print("[Keyboard] Listener stopped.")

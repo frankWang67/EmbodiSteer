@@ -2,10 +2,11 @@
 
 The command validates the robot and obstacle YAML files before loading a
 checkpoint or opening any device. Use ``--dry_run`` to exercise this safety
-boundary on a workstation without robot hardware.
+boundary without robot hardware, after installing the real runtime profile.
 """
 
 # %%
+import json
 import os
 import pathlib
 import time
@@ -20,37 +21,19 @@ import numpy as np
 import scipy.spatial.transform as st
 import torch
 from omegaconf import OmegaConf, open_dict
-import json
-from diffusion_policy.common.replay_buffer import ReplayBuffer
-from diffusion_policy.common.cv2_util import (
-    get_image_transform
-)
-from umi.common.cv_util import (
-    parse_fisheye_intrinsics,
-    FisheyeRectConverter
-)
+
+from diffusion_policy.common.cv2_util import get_image_transform
 from diffusion_policy.common.pytorch_util import dict_apply
+from diffusion_policy.common.replay_buffer import ReplayBuffer
 from diffusion_policy.workspace.base_workspace import BaseWorkspace
-from umi.common.precise_sleep import precise_wait
-from umi.real_world.bimanual_umi_env import BimanualUmiEnv
-from umi.real_world.keystroke_counter import (
-    KeystrokeCounter, Key, KeyCode
-)
-from umi.real_world.real_inference_util import (get_real_obs_dict,
-                                                get_real_obs_resolution,
-                                                get_real_umi_obs_dict,
-                                                get_real_umi_action,
-                                                get_robot_cfg_name,
-                                                build_policy_current_joint_angles,
-                                                get_current_action_base_pose)
-# from umi.real_world.spacemouse_shared_memory import Spacemouse
-from umi.real_world.keyboard_spacemouse_shared_memory import KeyboardSpacemouse as Spacemouse
-from umi.common.pose_util import pose_to_mat, mat_to_pose
-from embodisteer.adapters.real import (
-    load_obstacle_config,
+from embodisteer.adapters.real import load_obstacle_config
+from embodisteer.real_config import (
+    load_obstacle_geometry,
     load_yaml_mapping,
     validate_robot_config,
+    validate_real_policy,
 )
+from embodisteer.runtime import repository_root
 from embodisteer.runtime_config import (
     PolicyConfigError,
     ee_policy_overrides,
@@ -58,9 +41,80 @@ from embodisteer.runtime_config import (
     load_policy_config,
     policy_target,
 )
-from embodisteer.runtime import repository_root
+from umi.common.cv_util import (
+    FisheyeRectConverter,
+    parse_fisheye_intrinsics,
+)
+from umi.common.pose_util import mat_to_pose, pose_to_mat
+from umi.common.precise_sleep import precise_wait
+from umi.real_world.bimanual_umi_env import BimanualUmiEnv
+from umi.real_world.keyboard_shared_memory import Keyboard
+from umi.real_world.spacemouse_shared_memory import Spacemouse
+from umi.real_world.keystroke_counter import Key, KeyCode, KeystrokeCounter
+from umi.real_world.real_inference_util import (
+    build_policy_current_joint_angles,
+    get_current_action_base_pose,
+    get_real_obs_resolution,
+    get_real_umi_action,
+    get_real_umi_obs_dict,
+    get_robot_cfg_name,
+)
 
-OmegaConf.register_new_resolver("eval", eval, replace=True)
+PREV_MATCHED_EPISODE_KEY = "p"
+ALL_ROBOTS_KEY = "0"
+
+
+def create_input_device(input_device, shm_manager):
+    """Construct the configured human teleoperation input process."""
+    if input_device == "keyboard":
+        return Keyboard(shm_manager=shm_manager)
+    if input_device == "spacemouse":
+        return Spacemouse(shm_manager=shm_manager)
+    raise ValueError(
+        f"Unsupported input_device {input_device!r}; expected 'keyboard' or 'spacemouse'"
+    )
+
+
+def print_teleop_instructions(
+    input_device, num_robots, *, has_match_dataset=False, has_match_episode=False,
+):
+    """Print the controls used during the human-in-the-loop phase."""
+    print("\n=== Human teleoperation controls ===")
+    print(f"Input device: {input_device}")
+    print("Use lowercase letter keys (no Shift). Hold motion/gripper controls to move.")
+    if input_device == "keyboard":
+        print("Motion: W/S = X +/-; A/D = Y +/-; R/F = Z +/-")
+        print("Rotation: I/K = roll +/-; J/L = pitch +/-; U/O = yaw +/-")
+        print("Gripper: Z = close; X = open")
+    else:
+        print("Motion/rotation: use the six SpaceMouse axes")
+        print("Gripper: SpaceMouse button 0 = close; button 1 = open")
+    print("C = start policy execution and episode recording")
+    print("Q = quit")
+    print("Backspace = delete the last recorded episode and its videos (confirmation required)")
+    if num_robots > 1:
+        print(f"{ALL_ROBOTS_KEY} = control all robots; 1/2 = control robot 1/2 (default: robot 1)")
+    else:
+        print("Robot selection: robot 1 only; do not press 2.")
+    if has_match_episode:
+        print(f"E/{PREV_MATCHED_EPISODE_KEY.upper()} = next/previous matched episode (--match_episode)")
+    if has_match_dataset:
+        print("M = move robot 1 to the matched episode's initial pose and gripper width")
+    if input_device == "keyboard":
+        print("S commands -X motion here; it stops the episode only during policy execution.")
+    print("Release motion/gripper controls before switching modes.")
+    print("Software shortcuts are not an emergency stop; keep the hardware E-stop available.")
+
+
+def print_policy_instructions(input_device):
+    """Print the controls available while the policy is executing."""
+    print("\n=== Policy execution controls ===")
+    print("S = end the episode and return to human control (lowercase s)")
+    print("Q is available only after returning to human control.")
+    if input_device == "keyboard":
+        print("Release S promptly: holding it after returning commands -X motion.")
+    print("Software shortcuts are not an emergency stop; keep the hardware E-stop available.")
+
 
 def solve_table_collision(ee_pose, gripper_width, height_threshold):
     finger_thickness = 25.5 / 1000
@@ -73,6 +127,7 @@ def solve_table_collision(ee_pose, gripper_width, height_threshold):
     transformed_keypoints = np.transpose(rot_mat @ np.transpose(keypoints)) + ee_pose[:3]
     delta = max(height_threshold - np.min(transformed_keypoints[:, 2]), 0)
     ee_pose[2] += delta
+
 
 def solve_sphere_collision(ee_poses, robots_config):
     num_robot = len(robots_config)
@@ -161,7 +216,7 @@ def build_display_image(obs, main_img, env, vis_camera_idx, episode_text):
 @click.option('--output', '-o', required=False, default=None, help='Directory to save recording (required unless --dry_run)')
 @click.option('--robot_config', '-rc', required=True,
               type=click.Path(exists=True, dir_okay=False),
-              help='Path to robot_config YAML file.')
+              help='Path to robot_config YAML with robots, grippers and input_device.')
 @click.option('--match_dataset', '-m', default=None, help='Dataset used to overlay and adjust initial condition')
 @click.option('--match_episode', '-me', default=None, type=int, help='Match specific episode from the match dataset')
 @click.option('--match_camera', '-mc', default=0, type=int)
@@ -182,7 +237,7 @@ def build_display_image(obs, main_img, env, vis_camera_idx, episode_text):
 @click.option('--obstacle_config', required=True,
               type=click.Path(exists=True, dir_okay=False),
               help="YAML obstacle layout in the robot base frame.")
-@click.option('--dry_run', is_flag=True, help="Validate configuration and exit without loading a checkpoint or connecting to hardware.")
+@click.option('--dry_run', '--dry-run', is_flag=True, help="Validate configuration with the real runtime installed; do not load a checkpoint or connect to devices.")
 @click.option(
     '--policy-config',
     type=click.Path(dir_okay=False),
@@ -215,22 +270,33 @@ def main(input, output, robot_config,
     gripper_speed = 0.2
     
     # load robot config file
-    robot_config_data = load_yaml_mapping(robot_config)
-    validate_robot_config(robot_config_data, require_addresses=not dry_run)
-    obstacle_info = load_obstacle_config(obstacle_config)
+    try:
+        robot_config_data = load_yaml_mapping(robot_config)
+        validate_robot_config(robot_config_data, require_addresses=not dry_run)
+        validate_real_policy(robot_config_data, policy_settings)
+        obstacle_geometry = load_obstacle_geometry(obstacle_config)
+    except (ValueError, OSError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    input_device = robot_config_data.get('input_device', 'keyboard')
     if dry_run:
         print(
             "Real-world configuration OK: "
             f"robots={len(robot_config_data['robots'])}, "
             f"grippers={len(robot_config_data['grippers'])}, "
-            f"obstacles={len(obstacle_info)}, "
+            f"obstacles={len(obstacle_geometry)}, "
+            f"input_device={input_device}, "
             f"inference_space={inference_space}, "
             f"guidance={guidance or 'none'}. "
+            "Configuration only (template addresses allowed). "
+            "Runtime modules were imported; full dependency and device readiness were not checked. "
             "No device connection was attempted."
         )
         return
     if input is None or output is None:
         raise click.UsageError("--input and --output are required unless --dry_run is used")
+
+    OmegaConf.register_new_resolver("eval", eval, replace=True)
+    obstacle_info = load_obstacle_config(obstacle_config)
     
     # load left-right robot relative transform
     tx_left_right = np.array(robot_config_data['tx_left_right'])
@@ -295,8 +361,9 @@ def main(input, output, robot_config,
         ]
 
     print("steps_per_inference:", steps_per_inference)
+    print("input_device:", input_device)
     with SharedMemoryManager() as shm_manager:
-        with Spacemouse(shm_manager=shm_manager) as sm, \
+        with create_input_device(input_device, shm_manager=shm_manager) as sm, \
             KeystrokeCounter() as key_counter, \
             BimanualUmiEnv(
                 output_dir=output,
@@ -422,6 +489,11 @@ def main(input, output, robot_config,
             while True:
                 # ========= human control loop ==========
                 print("Human in control!")
+                print_teleop_instructions(
+                    input_device, len(robots_config),
+                    has_match_dataset=match_replay_buffer is not None,
+                    has_match_episode=match_episode is not None,
+                )
                 robot_states = env.get_robot_state()
                 target_pose = np.stack([rs['TargetTCPPose'] for rs in robot_states])
 
@@ -483,7 +555,7 @@ def main(input, output, robot_config,
                             # Next episode
                             if match_episode is not None:
                                 match_episode = min(match_episode + 1, env.replay_buffer.n_episodes-1)
-                        elif key_stroke == KeyCode(char='w'):
+                        elif key_stroke == KeyCode(char=PREV_MATCHED_EPISODE_KEY):
                             # Prev episode
                             if match_episode is not None:
                                 match_episode = max(match_episode - 1, 0)
@@ -507,7 +579,7 @@ def main(input, output, robot_config,
                             if click.confirm('Are you sure to drop an episode?'):
                                 env.drop_episode()
                                 key_counter.clear()
-                        elif key_stroke == KeyCode(char='a'):
+                        elif key_stroke == KeyCode(char=ALL_ROBOTS_KEY):
                             control_robot_idx_list = list(range(target_pose.shape[0]))
                         elif key_stroke == KeyCode(char='1'):
                             control_robot_idx_list = [0]
@@ -568,6 +640,7 @@ def main(input, output, robot_config,
                     iter_idx += 1
                 
                 # ========== policy control loop ==============
+                print_policy_instructions(input_device)
                 try:
                     # start episode
                     policy.reset()
