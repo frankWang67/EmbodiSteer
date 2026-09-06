@@ -36,9 +36,10 @@ def required_packages(config, policy, record_realsense=False):
         "einops": "einops", "opencv-python": "cv2", "av": "av",
         "zarr": "zarr", "numcodecs": "numcodecs", "imagecodecs": "imagecodecs",
         "atomics": "atomics", "pynput": "pynput", "threadpoolctl": "threadpoolctl",
+        # The public policies package imports the joint policy even for an EE
+        # target, so both dependencies must be importable in either mode.
+        "nvidia-curobo": "curobo", "pytorch-kinematics": "pytorch_kinematics",
     }
-    if policy["inference_space"] == "joint":
-        packages.update({"nvidia-curobo": "curobo", "pytorch-kinematics": "pytorch_kinematics"})
     for robot in config["robots"]:
         if robot["robot_type"] in ("ur5", "ur5e"):
             packages["ur-rtde"] = "rtde_control"

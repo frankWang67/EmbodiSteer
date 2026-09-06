@@ -33,8 +33,8 @@ def test_package_selection_matches_robot_gripper_camera(robot_config):
     robot_config["robots"][0]["robot_type"] = "franka"
     robot_config["grippers"][0] = {"gripper_type": "wsg50", "gripper_ip": "wsg.example.test"}
     packages = preflight_real.required_packages(robot_config, {"inference_space": "ee"}, True)
-    assert {"zerorpc", "fastcrc", "pyrealsense2"} <= packages.keys()
-    assert {"ur-rtde", "robotiq-gripper", "pyserial", "pymodbus", "nvidia-curobo"}.isdisjoint(packages)
+    assert {"zerorpc", "fastcrc", "pyrealsense2", "nvidia-curobo", "pytorch-kinematics"} <= packages.keys()
+    assert {"ur-rtde", "robotiq-gripper", "pyserial", "pymodbus"}.isdisjoint(packages)
 
 
 @pytest.mark.parametrize("input_device", [None, "keyboard", "spacemouse"])
@@ -72,6 +72,28 @@ def test_missing_package_fails_without_connecting(tmp_path, monkeypatch, robot_c
     network = Mock(side_effect=AssertionError)
     monkeypatch.setattr(preflight_real, "check_network", network)
     assert preflight_real.main(cli_args(tmp_path, robot_config) + ["--connect"]) == 1
+    network.assert_not_called()
+
+
+@pytest.mark.parametrize("policy_config", ["ee.yaml", "embodisteer.yaml"])
+@pytest.mark.parametrize("missing_package", ["nvidia-curobo", "pytorch-kinematics"])
+def test_shared_policy_dependencies_are_required_before_network_checks(
+    tmp_path, monkeypatch, robot_config, capsys, policy_config, missing_package,
+):
+    def version(name):
+        if name == missing_package:
+            raise preflight_real.metadata.PackageNotFoundError(name)
+        return {"pymodbus": "3.8.6", "pyserial": "3.5", "robotiq-gripper": "0.1.0"}.get(name, "1.0")
+
+    monkeypatch.setattr(preflight_real.metadata, "version", version)
+    monkeypatch.setattr(preflight_real.util, "find_spec", lambda name: object())
+    network = Mock(side_effect=AssertionError("Must not connect with missing dependencies"))
+    monkeypatch.setattr(preflight_real, "check_network", network)
+    args = cli_args(tmp_path, robot_config) + [
+        "--policy-config", str(ROOT / "configs/policy" / policy_config), "--connect",
+    ]
+    assert preflight_real.main(args) == 1
+    assert f"FAIL {missing_package}" in capsys.readouterr().out
     network.assert_not_called()
 
 

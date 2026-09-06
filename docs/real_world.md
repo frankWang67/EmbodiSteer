@@ -185,6 +185,10 @@ for the selected robot, gripper and inference space. It never imports a
 controller or instantiates `RobotiqController`. `--record-realsense` requires
 the optional SDK but does not enumerate or start RealSense devices.
 
+cuRobo and `pytorch-kinematics` are checked in both EE and joint modes: the
+public policy package currently imports its joint-policy modules even when
+selecting an EE policy. Both dependencies are supplied by the real installation.
+
 Add `--check-devices` to check serial/UVC character-device paths and read/write
 permissions, plus local `lsusb`/display prerequisites. It uses filesystem
 metadata only: no serial opening, camera capture, USB reset or permission
