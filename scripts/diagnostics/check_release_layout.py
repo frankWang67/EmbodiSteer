@@ -51,7 +51,6 @@ REQUIRED_PATHS = (
     "third_party/manifest.yaml",
     "third_party/assets.yaml",
     "THIRD_PARTY_NOTICES.md",
-    "artifacts/manifest.yaml",
     "environment/environment.yaml",
     "environment/requirements.txt",
     "environment/environment-simulation.yaml",
@@ -71,20 +70,8 @@ REQUIRED_PATHS = (
     "docs/architecture.md",
     "docs/simulation.md",
     "docs/real_world.md",
-    "docs/data_and_checkpoints.md",
     "docs/paper_reproduction.md",
 )
-
-REQUIRED_ARTIFACT_FIELDS = {
-    "id",
-    "type",
-    "task",
-    "revision",
-    "size_bytes",
-    "url",
-    "license",
-    "access",
-}
 
 FORBIDDEN_PROJECT_FILES_IN_UMI = (
     "diffusion_policy/common/guided_diffusion_util.py",
@@ -214,33 +201,6 @@ def check_publication_metadata(root: Path) -> list[str]:
                 errors.append(f"CITATION.cff: {field} is missing")
         if citation.get("type") != "software":
             errors.append("CITATION.cff: type must be software")
-
-    artifacts, artifact_errors = load_yaml_mapping(root / "artifacts/manifest.yaml")
-    errors.extend(artifact_errors)
-    if artifacts:
-        if artifacts.get("schema_version") != 1:
-            errors.append("artifacts/manifest.yaml: unsupported schema_version")
-        if artifacts.get("status") != "metadata_only":
-            errors.append("artifacts/manifest.yaml: expected metadata_only status")
-        publication = artifacts.get("publication")
-        if not isinstance(publication, dict):
-            errors.append("artifacts/manifest.yaml: publication must be a mapping")
-        else:
-            for field in ("checkpoints", "training_data"):
-                if publication.get(field) != "not_published":
-                    errors.append(
-                        f"artifacts/manifest.yaml: publication.{field} must be "
-                        "not_published for this release"
-                    )
-        if not isinstance(artifacts.get("artifacts"), list):
-            errors.append("artifacts/manifest.yaml: artifacts must be a list")
-        declared_fields = set(artifacts.get("required_fields_when_published", []))
-        missing_fields = REQUIRED_ARTIFACT_FIELDS - declared_fields
-        if missing_fields:
-            errors.append(
-                "artifacts/manifest.yaml: missing future artifact fields: "
-                + ", ".join(sorted(missing_fields))
-            )
 
     assets, asset_errors = load_yaml_mapping(root / "third_party/assets.yaml")
     errors.extend(asset_errors)

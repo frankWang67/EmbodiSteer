@@ -9,10 +9,8 @@
   the complete data/train/evaluation workflow.
 - [Real-world deployment](real_world.md) — configuration validation and hardware safety boundary.
 - [Policy configuration](policy_configuration.md) — shared algorithm settings for all evaluation entry points.
-- [Data and checkpoints](data_and_checkpoints.md) — intentionally external artifacts.
-- [Paper reproduction](paper_reproduction.md) — simulation reproduction runbook and remaining artifact gates.
-- [Artifact manifest](../artifacts/manifest.yaml) — machine-readable publication status.
+- [Paper reproduction](paper_reproduction.md) — experimental protocol and workflow with user-generated data and checkpoints.
 - [Asset ledger](../third_party/assets.yaml) — included and externally materialized assets.
-- [Citation metadata](../CITATION.cff) — software citation template.
+- [Citation metadata](../CITATION.cff) — machine-readable paper citation.
 - [Contributing](../CONTRIBUTING.md) — compatibility, safety and review expectations.
 - [Changelog](../CHANGELOG.md) — release-facing changes.

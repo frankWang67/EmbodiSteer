@@ -3,7 +3,6 @@ project: EmbodiSteer
 status: "pinned-dependencies"
 notes:
   - "ManiSkill is pinned to commit 856cebe6dabedb58032e82796c09d8a5acc49c68."
-  - "Checkpoint and training-data artifacts are described separately in artifacts/manifest.yaml."
 repositories:
   maniskill:
     role: "simulation tasks, robots, obstacles and floating-gripper environments"

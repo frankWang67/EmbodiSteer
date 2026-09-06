@@ -1,9 +1,7 @@
 # Paper reproduction
 
-This release provides stable policy imports and a complete executable
-simulation workflow; it does not bundle the large data/checkpoint artifacts or
-claim that the complete paper tables have already been regenerated. The
-experiment manifest in
+This release provides stable policy imports and an executable simulation
+workflow. The experiment manifest in
 [`configs/experiments/paper.yaml`](../configs/experiments/paper.yaml) records
 the three tasks, nine robot UIDs, method settings and metric semantics:
 `Fail@All` is the per-episode failure indicator, while collision count is the

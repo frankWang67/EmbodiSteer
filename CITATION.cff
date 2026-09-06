@@ -1,11 +1,12 @@
 cff-version: 1.2.0
-message: "If you use EmbodiSteer, please cite this software."
+message: "If you use EmbodiSteer, please cite our paper."
 type: software
-title: "EmbodiSteer: Steering Embodiment-Agnostic Visuomotor Policies with Joint-Space Guidance for Zero-Shot Cross-Embodiment Deployment"
+title: "EmbodiSteer"
 version: 0.1.0
 abstract: >-
   Inference-time steering for deploying a frozen Cartesian diffusion policy
   across robot embodiments with kinematic and whole-body collision guidance.
+repository-code: https://github.com/frankWang67/EmbodiSteer
 authors:
   # Shihefeng Wang and Kangchen Lv contributed equally.
   - given-names: Shihefeng
@@ -31,3 +32,18 @@ keywords:
   - joint-space guidance
   - diffusion policy
 license: MIT
+preferred-citation:
+  type: article
+  title: "EmbodiSteer: Steering Embodiment-Agnostic Visuomotor Policies with Joint-Space Guidance for Zero-Shot Cross-Embodiment Deployment"
+  authors:
+    - given-names: Shihefeng
+      family-names: Wang
+    - given-names: Kangchen
+      family-names: Lv
+    - given-names: Mingrui
+      family-names: Yu
+    - given-names: Xiang
+      family-names: Li
+  journal: "arXiv preprint arXiv:2606.12965"
+  year: 2026
+  url: https://arxiv.org/abs/2606.12965

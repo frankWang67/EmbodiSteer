@@ -4,7 +4,7 @@ The physical and simulation paths share the same policy classes and method
 router. The paper profile uses `DiffusionUnetTimmPolicyEmbodiSteer`.
 The supported entry point is:
 
-```console
+```bash
 python eval_real.py \
   --input /private/checkpoints/experiment \
   --output /private/episodes \
@@ -56,7 +56,7 @@ replace a hardware emergency stop.
 Keyboard control needs no SpaceMouse packages. For a physical SpaceMouse,
 install the optional pinned backend and native packages on Ubuntu:
 
-```console
+```bash
 sudo apt-get install libspnav-dev spacenavd
 python -m pip install -r environment/spacemouse-requirements.txt
 sudo systemctl start spacenavd
@@ -134,7 +134,7 @@ installs only cuRobo from the fork manifest; it does not require ManiSkill or
 SAPIEN. See [installation](installation.md) for separate environment commands.
 For an existing environment, install just these additions with:
 
-```console
+```bash
 python -m pip install \
   "robotiq_gripper @ https://github.com/frankWang67/robotiq_modbus_gripper/archive/582a6c26a2462adb58c60ba229ad9578556cf464.tar.gz" \
   "pymodbus==3.8.6" "pyserial==3.5"
@@ -149,7 +149,7 @@ instantiate it just to check installation.
 
 Validate before connecting to hardware:
 
-```console
+```bash
 python eval_real.py --dry_run \
   --robot_config /private/configs/robot.yaml \
   --obstacle_config /private/configs/obstacles.yaml \
@@ -172,7 +172,7 @@ particular lab setup.
 
 Use a populated site configuration for the separate offline check:
 
-```console
+```bash
 python scripts/preflight_real.py \
   --robot_config /private/configs/robot.yaml \
   --obstacle_config /private/configs/obstacles.yaml \

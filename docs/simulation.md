@@ -31,8 +31,8 @@ Algorithm defaults are documented in
 [`configs/policy/embodisteer.yaml`](../configs/policy/embodisteer.yaml). Pass a
 profile with `--policy-config`; use
 [`configs/policy/ee.yaml`](../configs/policy/ee.yaml) for the Cartesian
-baseline. An evaluation requires a compatible checkpoint, which is
-intentionally not included in this repository. Operational arguments are
+baseline.
+The workflow below supports data generation and training. Operational arguments are
 listed by `python eval_sim_single_robot.py --help` and
 `python eval_sim_multi_robots.py --help`.
 
@@ -45,7 +45,7 @@ Diffusion Policy training configs remain under `diffusion_policy/config/`.
 Data generation, conversion, training and simulation evaluation are exposed as
 independent stages of one config-driven launcher:
 
-```console
+```bash
 ./run_sim_pipeline.sh \
   --config configs/workflows/simulation.yaml --stage all --dry-run
 ```
@@ -86,7 +86,7 @@ before a real evaluation.
 The eval stage accepts a trained workflow checkpoint by default, or an
 explicit external checkpoint and output location:
 
-```console
+```bash
 ./run_sim_pipeline.sh \
   --config configs/workflows/make_iced_coffee/evaluation_all_methods.yaml \
   --stage eval \

@@ -1,6 +1,5 @@
 schema_version: 1
 project: EmbodiSteer
-artifact_status: not_published
 policy_config: configs/policy/embodisteer.yaml
 robots:
   - ur5_robotiq_wristcam

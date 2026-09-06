@@ -8,10 +8,14 @@ live under ``embodisteer``.
 from .ee2joint import DiffusionUnetTimmPolicyJointSpace
 from .embodisteer import DiffusionUnetTimmPolicyEmbodiSteer, EmbodiSteerJointPolicy
 from .ee_space import EmbodiSteerEESpacePolicy
+from .baselines import DiffusionUnetTimmPolicyBaseline
+from .jm2d import DiffusionUnetTimmPolicyJM2D
 
 __all__ = [
     "DiffusionUnetTimmPolicyEmbodiSteer",
     "DiffusionUnetTimmPolicyJointSpace",
     "EmbodiSteerJointPolicy",
     "EmbodiSteerEESpacePolicy",
+    "DiffusionUnetTimmPolicyBaseline",
+    "DiffusionUnetTimmPolicyJM2D",
 ]

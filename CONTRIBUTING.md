@@ -20,7 +20,7 @@ adapter, and the validation you ran.
 
 Run the checks that are available in your environment:
 
-```console
+```bash
 python scripts/diagnostics/check_release_layout.py
 python -m compileall -q embodisteer diffusion_policy umi scripts_maniskill scripts_slam_pipeline eval_real.py
 python -m pytest -q

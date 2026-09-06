@@ -58,7 +58,7 @@ obstacle-layout paths.
 
 ## Example
 
-```console
+```bash
 python eval_sim_single_robot.py \
   --input /private/checkpoints/experiment \
   --ckpt_filename latest \
@@ -73,7 +73,7 @@ The multi-robot launcher accepts the same `--policy-config` and passes it
 unchanged to every child evaluation. The physical launcher also consumes the
 same file:
 
-```console
+```bash
 python eval_real.py --dry_run \
   --robot_config configs/real/robot.template.yaml \
   --obstacle_config configs/real/obstacles/door_frame.yaml \

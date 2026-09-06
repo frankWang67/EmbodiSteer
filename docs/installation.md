@@ -7,7 +7,7 @@ other's SDKs. Both share policy/runtime pins and cuRobo for joint-space inferenc
 
 Run from a local checkout:
 
-```console
+```bash
 conda env create -f environment/environment-simulation.yaml
 conda activate embodisteer-sim
 python scripts/bootstrap_third_party.py --profile simulation --check
@@ -26,7 +26,7 @@ Modbus, RealSense or keyboard drivers. The shell wrapper
 
 Use this profile instead, not as an overlay on the simulation environment:
 
-```console
+```bash
 conda env create -f environment/environment-real.yaml
 conda activate embodisteer-real
 python scripts/bootstrap_third_party.py --profile real --check
@@ -53,7 +53,7 @@ See [input-device setup](real_world.md#teleoperation-input-device) and
 Populate a private copy of the robot template, then run the separate offline
 preflight:
 
-```console
+```bash
 python scripts/preflight_real.py \
   --robot_config /private/configs/robot.yaml \
   --obstacle_config /private/configs/obstacles.yaml \
@@ -101,7 +101,7 @@ The following static/schema and mocked preflight tests remain lightweight
 a GPU or devices. Run `tests/test_eval_real_cli_validation.py` in the installed
 real environment to test the launcher's help, dry-run and early-exit behavior.
 
-```console
+```bash
 python scripts/diagnostics/check_release_layout.py
 python -m pytest -q tests/test_deployment_boundaries.py tests/test_real_preflight.py
 ```

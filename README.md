@@ -1,6 +1,34 @@
-# EmbodiSteer
+<h1 align="center">
+  EmbodiSteer: Steering Embodiment-Agnostic Visuomotor Policies with Joint-Space Guidance for Zero-Shot Cross-Embodiment Deployment
+</h1>
 
-EmbodiSteer is an inference-time steering framework for deploying a frozen
+<p align="center">
+  Shihefeng Wang<sup>*</sup>,
+  Kangchen Lv<sup>*</sup>,
+  <a href="https://mingrui-yu.github.io/">Mingrui Yu</a><sup>†</sup>,
+  <a href="https://sites.google.com/view/homepageoflixiang/home">Xiang Li</a><sup>†</sup>
+</p>
+
+<p align="center">
+  <sup>*</sup> Equal contribution &nbsp;&nbsp;
+  <sup>†</sup> Co-corresponding authors
+</p>
+
+<p align="center">
+  <a href="https://arxiv.org/abs/2606.12965">
+    <img src="https://img.shields.io/badge/arXiv-2606.12965-b31b1b.svg" alt="arXiv paper">
+  </a>
+  <a href="https://frankwang67.github.io/EmbodiSteer-Page/">
+    <img src="https://img.shields.io/badge/Project%20Page-EmbodiSteer-2ea44f.svg" alt="Project page">
+  </a>
+</p>
+
+<p align="center">
+  <img src="assets/teaser.jpg" alt="EmbodiSteer teaser" width="58%">
+  <img src="assets/demo_collection.gif" alt="EmbodiSteer demonstration collection" width="41%">
+</p>
+
+EmbodiSteer is an inference-time steering framework for deploying a frozen embodiment-agnostic
 Cartesian Diffusion Policy across robot embodiments. During denoising, the
 policy state is lifted into the target robot's joint space, mapped through FK
 and a damped Jacobian, and optionally corrected with cuRobo whole-body SDF
@@ -9,15 +37,27 @@ collision guidance.
 This repository is a self-contained release tree. Simulation and physical
 deployment use the same public policy package and versioned configuration.
 
-Read the [`method overview`](docs/method.md) and
-[`installation guide`](docs/installation.md), then choose
+Read [`docs/method.md`](docs/method.md) and
+[`docs/installation.md`](docs/installation.md), then choose
 [`docs/simulation.md`](docs/simulation.md) or
-[`docs/real_world.md`](docs/real_world.md). The current release pass excludes
-checkpoints and training data; their machine-readable status is in
-[`artifacts/manifest.yaml`](artifacts/manifest.yaml), with details in
-[`docs/data_and_checkpoints.md`](docs/data_and_checkpoints.md).
+[`docs/real_world.md`](docs/real_world.md).
 
-## Repository layout
+## 📰 News
+
+- **2026.9.6** — The EmbodiSteer code is now open source!
+- **2026.9.4** — Our paper has been accepted to **CoRL 2026**! 🎉
+
+## 🗂️ Repository layout
+
+This codebase primarily extends the
+[Universal Manipulation Interface (UMI)](https://github.com/frankWang67/universal_manipulation_interface)
+repository. The inherited components provide the Diffusion Policy stack and
+the real-world hardware/data interfaces. EmbodiSteer adds its steering
+algorithm on top of that foundation: simulation workflows depend on
+[ManiSkill](https://github.com/mani-skill/ManiSkill), while the algorithm uses
+[cuRobo](https://github.com/NVlabs/curobo) for robot kinematics and collision
+queries. The supported fork revisions are recorded in
+[`third_party/manifest.yaml`](third_party/manifest.yaml).
 
 ```text
 EmbodiSteer/
@@ -34,7 +74,6 @@ EmbodiSteer/
 ├── scripts_slam_pipeline/    # data/SLAM preparation utilities
 ├── eval_real.py              # real-world evaluation entry point
 ├── third_party/              # dependency pins and asset provenance ledger
-├── artifacts/                # checkpoint/data publication manifest
 ├── environment/              # environment and system requirements
 ├── tests/                    # CPU/layout tests and algorithm tests
 └── docs/                     # release documentation
@@ -53,15 +92,28 @@ live under `embodisteer/`. Start with
 to read the paper's denoising loop and CBF correction. See
 [`docs/architecture.md`](docs/architecture.md) for the shared runtime boundary.
 
-## Public policy imports
+## 🧩 Public policy imports
 
-The paper method and joint-space comparison have separate classes:
+The repository includes the paper method, joint-space and Cartesian guidance
+comparisons, and the post-hoc baselines used in the benchmark. All of these
+policies are exported from `embodisteer.policies`:
 
 ```python
-from embodisteer.policies import DiffusionUnetTimmPolicyEmbodiSteer  # paper: CBF
-from embodisteer.policies import DiffusionUnetTimmPolicyJointSpace  # no guidance / GD
-from embodisteer.policies import EmbodiSteerEESpacePolicy
+from embodisteer.policies import DiffusionUnetTimmPolicyEmbodiSteer  # paper: CBF in joint space
+from embodisteer.policies import EmbodiSteerEESpacePolicy            # Cartesian space policy: vanilla / GD
+from embodisteer.policies import DiffusionUnetTimmPolicyJointSpace   # joint space policy: no guidance / GD
+from embodisteer.policies import DiffusionUnetTimmPolicyBaseline     # post-hoc CBF / batch sampling
+from embodisteer.policies import DiffusionUnetTimmPolicyJM2D         # JM2D
 ```
+
+The available evaluation methods are:
+
+- joint-space CBF: `DiffusionUnetTimmPolicyEmbodiSteer` (the paper method);
+- joint-space no guidance or GD: `DiffusionUnetTimmPolicyJointSpace`;
+- Cartesian vanilla or GD: `EmbodiSteerEESpacePolicy`;
+- post-hoc CBF or batch sampling: `DiffusionUnetTimmPolicyBaseline`, selected
+  by `baseline_method`; and
+- JM2D conditional generation: `DiffusionUnetTimmPolicyJM2D`.
 
 Checkpoints trained with the bundled Diffusion Policy model remain
 interoperable: the evaluation launchers load their stored configuration and
@@ -70,58 +122,15 @@ requested by the policy YAML before constructing the workspace. The public
 `EmbodiSteerJointPolicy` alias denotes `DiffusionUnetTimmPolicyEmbodiSteer`
 (CBF only), not the GD/no-guidance comparison class.
 
-## Installation boundary
+## ⚙️ Installation
 
-1. Choose [simulation](environment/environment-simulation.yaml) or
-   [real robot](environment/environment-real.yaml); their SDK dependencies are separate.
-2. Install or expose this checkout (`pip install -e .` or run commands from
-   this directory).
-3. Validate the dependency manifest:
+See [`docs/installation.md`](docs/installation.md) for simulation and
+real-robot setup instructions.
 
-   ```console
-   python scripts/bootstrap_third_party.py --profile simulation --check
-   ```
+## 🎮 Simulation experiments
 
-4. Materialize the pinned dependencies with the bootstrap script. The script
-   never runs implicitly.
-
-Simulation installation from a fresh checkout:
-
-```console
-git clone https://github.com/frankWang67/EmbodiSteer.git
-cd EmbodiSteer
-conda env create -f environment/environment-simulation.yaml
-conda activate embodisteer-sim
-python scripts/bootstrap_third_party.py --profile simulation --check
-python scripts/bootstrap_third_party.py --profile simulation --install --cuda-home /usr/local/cuda
-python -m pip install -e '.[dev]'
-python -m pip check
-python -m pytest -q tests/test_deployment_boundaries.py tests/test_real_preflight.py
-```
-
-For a real-only workstation, use this instead (cuRobo is shared; ManiSkill is not installed):
-
-```console
-conda env create -f environment/environment-real.yaml
-conda activate embodisteer-real
-python scripts/bootstrap_third_party.py --profile real --install --cuda-home /usr/local/cuda
-python -m pip install -e '.[dev]'
-python -m pip check
-```
-
-See [installation](docs/installation.md) for the separate dry-run/preflight
-commands. The old `environment.yaml` remains an all-in-one compatibility
-profile; it is not needed for either single-purpose workstation.
-
-Replace `/usr/local/cuda` with the CUDA toolkit used by the installed PyTorch
-build. If the fixed forks are already installed, omit the `--install` command.
-
-The repository does not publish or require project checkpoint and training
-data artifacts for installation. The empty artifact inventory is intentional
-rather than a missing download link. Complete paper-table reproduction will be
-documented only after their release location is decided.
-
-## Simulation entry points
+See [`docs/simulation.md`](docs/simulation.md) for detailed simulation
+workflow, configuration, and evaluation instructions.
 
 `run_sim_pipeline.sh` is the simplest interface for simulation experiments; it
 enters the `embodisteer-sim` Conda environment and forwards all options to
@@ -135,7 +144,7 @@ YAML. The paper profile is
 [`configs/policy/embodisteer.yaml`](configs/policy/embodisteer.yaml); the
 Cartesian profile is [`configs/policy/ee.yaml`](configs/policy/ee.yaml).
 
-```console
+```bash
 python eval_sim_single_robot.py --help
 python eval_sim_multi_robots.py --help
 ./run_sim_pipeline.sh --help
@@ -151,7 +160,7 @@ checkpoint.
 
 For a newly trained checkpoint, preview the complete simulation pipeline with:
 
-```console
+```bash
 ./run_sim_pipeline.sh \
   --config configs/workflows/simulation.yaml --stage all --dry-run
 ```
@@ -160,7 +169,7 @@ The checked-in workflow targets `MakeIcedCoffee-v1`. After installing the
 pinned ManiSkill/cuRobo forks, run the complete local workflow on a selected
 GPU with:
 
-```console
+```bash
 CUDA_VISIBLE_DEVICES=0 ./run_sim_pipeline.sh \
   --config configs/workflows/simulation.yaml --stage all
 ```
@@ -168,7 +177,7 @@ CUDA_VISIBLE_DEVICES=0 ./run_sim_pipeline.sh \
 To evaluate an existing checkpoint without recollecting data or retraining,
 use the single-robot entry point:
 
-```console
+```bash
 CUDA_VISIBLE_DEVICES=0 python eval_sim_single_robot.py \
   --input /path/to/checkpoint.ckpt --ckpt_filename latest \
   --env_id MakeIcedCoffee-v1 \
@@ -182,7 +191,7 @@ CUDA_VISIBLE_DEVICES=0 python eval_sim_single_robot.py \
 For a lightweight configuration check that does not require a checkpoint or
 hardware, use:
 
-```console
+```bash
 python run_sim_workflow.py \
   --config configs/workflows/simulation.yaml --stage all --dry-run
 ```
@@ -201,7 +210,35 @@ then pass that file with `--config`; the shell script itself does not need to
 be copied or edited. Set `EMBODISTEER_CONDA_ENV` only when using a Conda
 environment with a different name.
 
-## Real-world code
+## 🦾 Real-world experiments
+
+See [`docs/real_world.md`](docs/real_world.md) for detailed hardware
+configuration and deployment instructions.
+
+Our real-world setup follows the hardware used by the
+[UMI codebase](https://github.com/frankWang67/universal_manipulation_interface):
+the same handheld gripper (with the mirror removed during our experiments) for data collection,
+and UR5 / Franka Panda robot arms. The robot-mounted gripper differs from
+UMI's WSG50: we use a Robotiq 2F-85.
+
+The current real-world joint-space code selects cuRobo models for these two
+arm–gripper combinations, with Robotiq as the default gripper:
+
+- `robot_type: ur5` selects UR5 + Robotiq 2F-85 (`ur5_robotiq_umi.yml`).
+- `robot_type: franka` selects Franka Panda + Robotiq 2F-85
+  (`panda_robotiq_umi.yml`).
+
+If you change either the robot arm or the gripper—for example, to UMI's
+WSG50—you must add the corresponding robot model and collision configuration
+in cuRobo and update the real-world model selection and gripper joint mapping
+accordingly. Changing `robot_type` or `gripper_type` alone is not sufficient
+for joint-space deployment. The original UMI WSG50 code is retained without
+modification, but no WSG50 cuRobo model is configured in this release.
+
+For data collection and robot-arm setup, please follow the UMI tutorials. For
+adapting a Robotiq gripper to UMI, refer to the open-source assets linked from
+[FastUMI](https://fastumi.com/), which include the Robotiq-related 3D models
+used by this setup.
 
 `eval_real.py` and `umi/real_world/` are included so the simulation and physical
 deployment paths share the same policy package. `scripts_real/` documents the
@@ -211,7 +248,7 @@ and explicit robot/gripper configuration. Never place credentials or
 site-specific network addresses in a public config. The real-world path is not
 a substitute for hardware safety validation.
 
-## Scope and licensing
+## 📄 Scope and licensing
 
 Checkpoint files, training data, wandb runs and large experiment outputs are
 not part of this release tree. The repository includes Block Pushing and
@@ -222,10 +259,35 @@ them. ManiSkill assets are CC BY-NC 4.0, and cuRobo is limited to
 non-commercial research/evaluation under its NVIDIA License. The root
 `LICENSE` does not replace any asset or external dependency terms.
 
-## Citation
-
-Citation metadata is provided in [`CITATION.cff`](CITATION.cff). Shihefeng Wang
-and Kangchen Lv contributed equally; Mingrui Yu and Xiang Li are
-co-corresponding authors.
 Contribution and release-note conventions are documented in
 [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`CHANGELOG.md`](CHANGELOG.md).
+
+## 🙏 Acknowledgement
+
+We gratefully thank the authors and maintainers of the open-source projects
+that make this work possible:
+
+- [Universal Manipulation Interface (UMI)](https://github.com/frankWang67/universal_manipulation_interface)
+  for the data-collection, visuomotor diffusion-policy implementation and real-world manipulation foundation;
+- [ManiSkill](https://github.com/mani-skill/ManiSkill) for the simulation
+  environments and benchmark infrastructure;
+- [cuRobo](https://github.com/NVlabs/curobo) for robot kinematics and
+  collision-query tools;
+- [FastUMI](https://fastumi.com/) for the Robotiq gripper assets used to adapt
+  the real-world setup.
+
+## 📚 Citation
+
+If you find EmbodiSteer useful in your research, please cite our paper.
+Machine-readable paper citation metadata is also available in
+[`CITATION.cff`](CITATION.cff).
+
+```bibtex
+@article{wang2026embodisteer,
+  title   = {{EmbodiSteer}: Steering Embodiment-Agnostic Visuomotor Policies with Joint-Space Guidance for Zero-Shot Cross-Embodiment Deployment},
+  author  = {Wang, Shihefeng and Lv, Kangchen and Yu, Mingrui and Li, Xiang},
+  journal = {arXiv preprint arXiv:2606.12965},
+  year    = {2026},
+  url     = {https://arxiv.org/abs/2606.12965}
+}
+```

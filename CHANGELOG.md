@@ -34,9 +34,4 @@ pre-publication phase, so no versioned release has been tagged yet.
   and public simulation/real-world policy entry points.
 - Pinned the reviewed ManiSkill and cuRobo fork revisions in
   `third_party/manifest.yaml`.
-- Documented the method, publication artifact status, and redistributed asset
-  provenance.
-
-Checkpoint files, training data, and benchmark results are intentionally not
-part of this phase. Future entries should include a release date, migration
-notes, and links to the corresponding artifact manifest entry.
+- Documented the method, data and redistributed asset provenance.

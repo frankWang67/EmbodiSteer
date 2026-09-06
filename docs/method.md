@@ -15,10 +15,10 @@ data/training components.
 
 ## Joint-space denoising
 
-Let `q^k` be the joint trajectory at reverse-diffusion iteration `k`. Each
+Let $q^k$ be the joint trajectory at reverse-diffusion iteration $k$. Each
 iteration performs the following operations:
 
-1. Forward kinematics maps every state in `q^k` to an absolute end-effector
+1. Forward kinematics maps every state in $q^k$ to an absolute end-effector
    position and orientation.
 2. The absolute pose is expressed relative to the current action chunk's
    starting pose. Rotation is represented in 6D, yielding the policy's
@@ -27,14 +27,14 @@ iteration performs the following operations:
 3. The frozen U-Net predicts the Cartesian diffusion output. The configured
    scheduler produces the next Cartesian target.
 4. The target is converted back to an absolute pose. EmbodiSteer computes a
-   six-dimensional world-frame residual `Delta x` from the current pose to
+   six-dimensional world-frame residual $\Delta x$ from the current pose to
    that target.
 5. A damped Jacobian pseudoinverse maps the task-space residual to a joint
    update:
 
-   ```text
-   Delta q = J^T (J J^T + lambda I)^(-1) Delta x.
-   ```
+   $$
+   \Delta q = J^{\top}\left(J J^{\top} + \lambda I\right)^{-1}\Delta x.
+   $$
 
 6. The update is clipped when configured and applied to the joint trajectory.
 
@@ -47,14 +47,14 @@ while the joint trajectory is exposed for joint-position control.
 
 cuRobo represents the robot with link collision spheres and queries them
 against an SDF world. For the query used here, cuRobo's signed distance
-`d_curobo` is positive inside an obstacle and negative outside it. EmbodiSteer
+$d_{\mathrm{cuRobo}}$ is positive inside an obstacle and negative outside it. EmbodiSteer
 therefore defines the CBF safety function as
 
-```text
-h(q) = -d_curobo(q),
-```
+$$
+h(q) = -d_{\mathrm{cuRobo}}(q),
+$$
 
-so larger `h` is safer. Per-sphere distances are reduced with either a strict
+so larger $h$ is safer. Per-sphere distances are reduced with either a strict
 maximum or a normalized smooth top-k aggregation. The top-k implementation
 preserves an actual penetration exactly instead of averaging it away. The
 current public obstacle adapter accepts oriented cuboids; extending it to
@@ -67,21 +67,31 @@ Its reverse-diffusion loop and `_apply_cbf_guidance` are in `embodisteer.py`.
 The shared robot runtime supplies collision queries; the closed-form QP
 implementation is in [`guidance/cbf.py`](../embodisteer/guidance/cbf.py).
 
-For CBF guidance, let `a = grad h(q)`, let `m` be the requested safety margin,
-and let `gamma_k` be the step-dependent guidance scale. The implementation
-uses
+For CBF guidance, let $m$ be the requested safety margin and let $\gamma_k$
+be the step-dependent guidance scale. The implementation uses
 
-```text
-H = J^T W J + lambda I
-r = max(gamma_k (m - h), 0)
+$$
+\begin{aligned}
+\underset{\Delta q}{\operatorname{minimize}}\quad
+    & \frac{1}{2}\Delta q^{\top} H\Delta q \\
+\text{subject to}\quad
+    & a^{\top}\Delta q \ge r.
+\end{aligned}
+$$
 
-minimize    1/2 Delta q^T H Delta q
-subject to  a^T Delta q >= r.
-```
+with
+
+$$
+\begin{aligned}
+a &= \nabla h(q), \\
+H &= J^{\top} W J + \lambda I, \\
+r &= \max\!\left(\gamma_k\left(m - h(q)\right), 0\right).
+\end{aligned}
+$$
 
 Because each trajectory state has one aggregated collision inequality, the
 minimum-task-disturbance update has a closed form. Position and rotation can
-receive different weights through `W`; regularization keeps `H` invertible.
+receive different weights through $W$; regularization keeps $H$ invertible.
 
 With scheduling enabled, the guidance multiplier follows a logistic curve and
 becomes strongest near the end of denoising. This leaves early sampling more
@@ -94,8 +104,14 @@ The release keeps the following comparison paths under `embodisteer/policies`:
 
 - `ee2joint.DiffusionUnetTimmPolicyJointSpace`: joint-space denoising with
   `guidance_method=""` (no guidance) or `"gd"` (gradient descent). GD is not
-  part of EmbodiSteer: it minimizes `relu(d_curobo + m)^p`, masks and clips the
-  gradient, then subtracts the scheduled scale times that clipped gradient;
+  part of EmbodiSteer. It minimizes
+
+  $$
+  \operatorname{ReLU}\!\left(d_{\mathrm{cuRobo}} + m\right)^p,
+  $$
+
+  masks and clips the gradient, then subtracts the scheduled scale times
+  that clipped gradient;
 - Cartesian EE sampling, with optional end-effector-only corner guidance;
 - post-hoc CBF, which denoises in Cartesian space and applies one joint-space
   correction after IK;
@@ -124,16 +140,3 @@ ManiSkill-specific environment extraction lives in `scripts_maniskill/`, while
 real-device configuration validation and obstacle conversion live in
 `embodisteer/adapters/` and `eval_real.py`. Robot drivers and launch safety are
 kept outside the method modules.
-
-## Current limitations
-
-- Checkpoints and training data are not included in this phase; their status
-  is recorded in `artifacts/manifest.yaml`.
-- ManiSkill and cuRobo are installed from fixed external fork revisions. Their
-  code and asset terms are not replaced by the repository's MIT license.
-- Whole-body guidance depends on the accuracy of robot collision spheres,
-  kinematics, obstacle poses, and controller tracking.
-- The public obstacle adapter currently builds cuboid world geometry.
-- The software does not establish real-robot safety. Hardware deployment
-  requires independent limits, workspace review, low-speed commissioning, and
-  an approved emergency-stop procedure.

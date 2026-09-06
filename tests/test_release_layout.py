@@ -2,6 +2,7 @@ from pathlib import Path
 
 from scripts.diagnostics.check_release_layout import (
     RETIRED_POLICY_FILES,
+    check_layout,
     check_public_strings,
 )
 
@@ -17,7 +18,6 @@ def test_release_tree_is_self_contained_at_top_level():
         "embodisteer",
         "diffusion_policy",
         "umi",
-        "artifacts/manifest.yaml",
         "configs/policy/embodisteer.yaml",
         "third_party/manifest.yaml",
         "third_party/assets.yaml",
@@ -33,6 +33,10 @@ def test_release_tree_is_self_contained_at_top_level():
     )
     missing = [name for name in required if not (ROOT / name).exists()]
     assert not missing, f"missing release paths: {missing}"
+
+
+def test_release_layout_checks_pass_for_current_tree():
+    assert check_layout(ROOT) == []
 
 
 def test_retired_policy_implementations_are_absent():

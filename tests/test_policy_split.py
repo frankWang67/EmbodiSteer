@@ -7,6 +7,7 @@ import pytest
 import torch
 from hydra.utils import get_class
 
+import embodisteer.policies as public_policies
 from embodisteer.policies import (
     DiffusionUnetTimmPolicyEmbodiSteer,
     DiffusionUnetTimmPolicyJointSpace,
@@ -25,6 +26,15 @@ from test_policy_config_integration import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.parametrize("cls", [
+    DiffusionUnetTimmPolicyBaseline,
+    DiffusionUnetTimmPolicyJM2D,
+])
+def test_public_baseline_exports_preserve_class_identity(cls):
+    assert getattr(public_policies, cls.__name__) is cls
+    assert cls.__name__ in public_policies.__all__
 
 
 def test_paper_policy_is_a_sibling_not_a_gd_subclass():
