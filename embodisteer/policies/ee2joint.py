@@ -698,7 +698,7 @@ class DiffusionUnetTimmPolicyJointSpace(_JointSpacePolicyRuntime):
                 spheres, self._coll_query_buffer, self._coll_weight,
                 self._coll_activation_distance,
                 env_query_idx=self._env_query_idx_for_batch(B, spheres.device),
-                return_loss=False, compute_esdf=True,
+                return_loss=True, compute_esdf=True,
             )
             dist_agg = self._aggregate_signed_distance(dist)
             penalty = self._collision_penalty(dist_agg)
