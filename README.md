@@ -44,6 +44,7 @@ Read [`docs/method.md`](docs/method.md) and
 
 ## 📰 News
 
+- **2026.9.30** — Our paper has been selected for a **Spotlight** presentation at **CoRL 2026** (72 out of 687 accepted papers)! 🎉
 - **2026.9.8** — Our paper has been accepted to [**IROS 2026 BLPC Workshop**](https://sites.google.com/bu.edu/hybridarchforautonomy/) (spotlight)! 🎉
 - **2026.9.6** — The EmbodiSteer code is now open source!
 - **2026.9.4** — Our paper has been accepted to [**CoRL 2026**](https://www.corl.org/)! 🎉
