@@ -285,11 +285,11 @@ Machine-readable paper citation metadata is also available in
 [`CITATION.cff`](CITATION.cff).
 
 ```bibtex
-@article{wang2026embodisteer,
-  title   = {{EmbodiSteer}: Steering Embodiment-Agnostic Visuomotor Policies with Joint-Space Guidance for Zero-Shot Cross-Embodiment Deployment},
-  author  = {Wang, Shihefeng and Lv, Kangchen and Yu, Mingrui and Li, Xiang},
-  journal = {arXiv preprint arXiv:2606.12965},
-  year    = {2026},
-  url     = {https://arxiv.org/abs/2606.12965}
+@inproceedings{wang2026embodisteer,
+  title={EmbodiSteer: Steering Embodiment-Agnostic Visuomotor Policies with Joint-Space Guidance for Zero-Shot Cross-Embodiment Deployment},
+  author={Shihefeng Wang and Kangchen Lv and Mingrui Yu and Xiang Li},
+  booktitle={10th Annual Conference on Robot Learning},
+  year={2026},
+  url={https://openreview.net/forum?id=2Z8xQxrlsY}
 }
 ```
